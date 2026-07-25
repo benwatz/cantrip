@@ -46,9 +46,13 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    2026) : bloc "Attaque" (armes uniquement, voir ci-dessous), ressource(s) de classe (un bloc de
    badges par ressource configurée, voir Paramètres ci-dessous), emplacements de sorts groupés par
    niveau en badges circulaires, bouton "Repos", puis en tout dernier la ligne de 3 tuiles
-   CA / Initiative / Déplacement (`profile.combatStats: { ac, initiative, speed }`, lecture seule,
-   éditées dans Paramètres) — ce regroupement dans le scroll évite qu'ils occupent en permanence
-   de la place à l'écran.
+   CA / Initiative / Déplacement (`profile.combatStats: { ac, initiative, speed }`) — ce
+   regroupement dans le scroll évite qu'ils occupent en permanence de la place à l'écran.
+   Éditables directement ici en plus de Paramètres (juillet 2026) : tap sur une valeur
+   (`data-action="edit-combat-stat"`) pour la remplacer par un champ texte (`ui.editingCombatStat`,
+   même pattern clic-pour-éditer que le max de PV/bouclier temporaire — `combatStatInput`, focus +
+   sélection auto, `blur`/Entrée valide et appelle `saveState()` directement, pas de brouillon
+   différé contrairement à Paramétrer le Personnage).
    **Bloc Attaque** (`profile.attacks`, tableau 0..n d'objets `{ id, name, melee, rangeMeters,
    attackBonus, damageDice, damageBonus, damageType }`, lecture seule ici — édité dans
    Paramétrer le Personnage) — masqué entièrement si `attacks` est vide (comme les ressources de

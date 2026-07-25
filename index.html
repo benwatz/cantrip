@@ -707,6 +707,7 @@
     view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'grimoire-prepare' | 'settings' | 'settings-character' | 'settings-grimoire' | 'settings-load-character'
     editingMax: false,
     editingTemp: false,
+    editingCombatStat: null, // null | 'ac' | 'initiative' | 'speed' — édition inline des tuiles CA/Initiative/Déplacement sur le Tracker
     shortRestOpen: false,
     shortRestChecks: { hp: false, spells: false, tempHp: false, classResource: false, counters: false },
     statsSearch: '',
@@ -1135,13 +1136,16 @@
     }).join('<div style="height:10px"></div>');
 
     var combatStatsHtml = [
-      { label: 'CA', value: p.combatStats.ac },
-      { label: 'Initiative', value: formatSigned(p.combatStats.initiative) },
-      { label: 'Déplacement', value: p.combatStats.speed + 'm' }
+      { key: 'ac', label: 'CA', display: p.combatStats.ac, inputValue: p.combatStats.ac, inputMode: 'numeric', pattern: '[0-9]*' },
+      { key: 'initiative', label: 'Initiative', display: formatSigned(p.combatStats.initiative), inputValue: formatSigned(p.combatStats.initiative), inputMode: 'text', pattern: '-?[0-9]*' },
+      { key: 'speed', label: 'Déplacement', display: p.combatStats.speed + 'm', inputValue: p.combatStats.speed, inputMode: 'numeric', pattern: '[0-9]*' }
     ].map(function (stat) {
+      var valueHtml = ui.editingCombatStat === stat.key
+        ? '<input id="combatStatInput" data-key="' + stat.key + '" type="text" inputmode="' + stat.inputMode + '" pattern="' + stat.pattern + '" value="' + stat.inputValue + '" style="width:100%;font-size:17px;font-weight:700;color:var(--text-gold);background:transparent;border:none;border-bottom:1px solid var(--text-gold);outline:none;padding:0;text-align:center;box-sizing:border-box" class="font-cinzel"/>'
+        : '<div data-action="edit-combat-stat" data-key="' + stat.key + '" style="font-size:17px;font-weight:700;color:var(--text-gold);cursor:pointer;border-bottom:1px dashed transparent" class="font-cinzel">' + stat.display + '</div>';
       return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:10px;padding:7px 6px">' +
         '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em">' + stat.label + '</div>' +
-        '<div style="font-size:17px;font-weight:700;color:var(--text-gold)" class="font-cinzel">' + stat.value + '</div>' +
+        valueHtml +
         '</div>';
     }).join('');
 
@@ -1922,6 +1926,22 @@
       tempInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') tempInput.blur(); });
     }
 
+    var combatStatInput = document.getElementById('combatStatInput');
+    if (combatStatInput) {
+      combatStatInput.focus();
+      combatStatInput.select();
+      combatStatInput.addEventListener('blur', function () {
+        var key = combatStatInput.getAttribute('data-key');
+        var stats = profile().combatStats;
+        var min = key === 'initiative' ? -99 : 0;
+        stats[key] = clamp(toInt(combatStatInput.value, stats[key]), min, 99);
+        ui.editingCombatStat = null;
+        saveState();
+        render();
+      });
+      combatStatInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') combatStatInput.blur(); });
+    }
+
     var nameInput = document.getElementById('nameInput');
     if (nameInput) {
       nameInput.addEventListener('input', function () {
@@ -2424,6 +2444,11 @@
       }
       case 'toggle-attacks-collapsed': {
         ui.attacksCollapsed = !ui.attacksCollapsed;
+        render();
+        break;
+      }
+      case 'edit-combat-stat': {
+        ui.editingCombatStat = e.currentTarget.getAttribute('data-key');
         render();
         break;
       }
