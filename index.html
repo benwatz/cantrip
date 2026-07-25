@@ -704,13 +704,14 @@
 
   // ---- ephemeral UI state (not persisted) ----
   var ui = {
-    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'grimoire-prepare' | 'settings' | 'settings-character' | 'settings-grimoire' | 'settings-load-character'
+    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'grimoire-prepare' | 'settings' | 'settings-character' | 'settings-grimoire' | 'settings-load-character' | 'settings-codex'
     editingMax: false,
     editingTemp: false,
     editingCombatStat: null, // null | 'ac' | 'initiative' | 'speed' — édition inline des tuiles CA/Initiative/Déplacement sur le Tracker
     shortRestOpen: false,
     shortRestChecks: { hp: false, spells: false, tempHp: false, classResource: false, counters: false },
     statsSearch: '',
+    codexSearch: '',
     grimoireTab: 0, // niveau numérique (0..9) ou 'classe'
     grimoireAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderGrimoire()/renderGrimoirePrepare()
     grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les onglets de niveau
@@ -985,6 +986,67 @@
     return prefix ? SPELL_TYPE_STYLES[prefix] : SPELL_TYPE_STYLE_DEFAULT;
   }
 
+  // Codex des PNJ rencontrés en campagne — contenu statique codé en dur (même principe que
+  // SPELLBOOK/DENEOR_SPELLBOOK ci-dessus), importé depuis la liste tenue par le MJ. Les portraits
+  // sont des fichiers statiques dans npc/ (pas de base64 inline), même convention que
+  // characters/calix.jpg. "💀" en lieu signifie que le PNJ est décédé.
+  var CODEX_PNJ = [
+    { prenom: "Methrammar", nom: "Aerasumé", occupation: "Grand Mage", faction: "Alliance des Seigneurs", lieu: "Lunargent", portrait: "npc/methrammar-aerasume.jpg" },
+    { prenom: "Sildar", nom: "Antriver", occupation: "Chevalier, Ambassadeur", faction: "Alliance des Seigneurs", lieu: "Padhiver", portrait: "npc/sildar-antriver.png" },
+    { prenom: "Iarno", nom: "'Bâton de Verre' Albrek", occupation: "Magicien", faction: "Alliance des Seigneurs", lieu: "💀", portrait: "npc/iarno-baton-de-verre-albrek.png" },
+    { prenom: "Darathra", nom: "Shendrel", occupation: "Seigneur Protectrice", faction: "Alliance des Seigneurs", lieu: "Troisangliers", portrait: "npc/darathra-shendrel.png" },
+    { prenom: "Nestra", nom: "Ruthiol", occupation: "Baronne des Eaux", faction: "Alliance des Seigneurs", lieu: "Yartar", portrait: "npc/nestra-ruthiol.jpg" },
+    { prenom: "Daran", nom: "Edermath", occupation: "Aventurier vétéran", faction: "Ordre du Gantelet", lieu: "Voyage", portrait: "npc/daran-edermath.jpg" },
+    { prenom: "Ontharr", nom: "Frume", occupation: "Paladin de Torm", faction: "Ordre du Gantelet", lieu: "Troisangliers", portrait: "npc/ontharr-frume.png" },
+    { prenom: "Leosine", nom: "Erlanthar", occupation: "Espionne", faction: "Ménestrels", lieu: "Voyage", portrait: "npc/leosine-erlanthar.jpg" },
+    { prenom: "Polly", nom: "Morphe", occupation: "Tenancière", faction: "Ménestrels", lieu: "Lunargent", portrait: "npc/polly-morphe.jpg" },
+    { prenom: "Roran", nom: "Balkian", occupation: "Cartographe", faction: "Ménestrels", lieu: "Lunargent", portrait: "npc/roran-balkian.jpg" },
+    { prenom: "Halia", nom: "Thornton", occupation: "Bourgmestre, Chef des Mineurs", faction: "Zhentarim", lieu: "Phandaline", portrait: "npc/halia-thornton.jpg" },
+    { prenom: "'Rouflaquettes'", nom: "", occupation: "Roublard", faction: "Zhentarim", lieu: "Phandaline", portrait: "npc/rouflaquettes.jpg" },
+    { prenom: "Sept", nom: "Saisons", occupation: "Propriétaire de casino", faction: "Zhentarim", lieu: "Lunargent", portrait: "npc/sept-saisons.jpg" },
+    { prenom: "Lila & Grommash", nom: "", occupation: "Primeurs", faction: "Devorare Animas", lieu: "Lunargent", portrait: "npc/lila-grommash.jpg" },
+    { prenom: "Morgana", nom: "", occupation: "Aventurière", faction: "Devorare Animas", lieu: "Lunargent", portrait: "npc/morgana.jpg" },
+    { prenom: "Kresnie", nom: "Tête-de-Lapis", occupation: "Artisan du cuir", faction: "Devorare Animas", lieu: "Yartar", portrait: "npc/kresnie-tete-de-lapis.jpg" },
+    { prenom: "Dralmorrer", nom: "Mornemine", occupation: "Crocdragon", faction: "Culte du Dragon", lieu: "Inconnu", portrait: "npc/dralmorrer-mornemine.png" },
+    { prenom: "Rezmir", nom: "la Noire", occupation: "Voix du Culte", faction: "Culte du Dragon", lieu: "💀", portrait: "npc/rezmir-la-noire.png" },
+    { prenom: "Elmina", nom: "Barthen", occupation: "Marchande", faction: "", lieu: "Phandaline", portrait: "npc/elmina-barthen.jpg" },
+    { prenom: "Qelline", nom: "Aulnefeuille", occupation: "Fermière", faction: "", lieu: "Phandaline", portrait: "npc/qelline-aulnefeuille.jpg" },
+    { prenom: "Linene", nom: "Ventgris", occupation: "Marchande", faction: "Bouclier au Lion", lieu: "Phandaline", portrait: "npc/linene-ventgris.png" },
+    { prenom: "Gundren", nom: "Cherchepierre", occupation: "Marchand, Propriétaire de Mine", faction: "", lieu: "Phandaline", portrait: "npc/gundren-cherchepierre.png" },
+    { prenom: "Toblen", nom: "Rochemont", occupation: "Tenancier", faction: "", lieu: "Phandaline", portrait: "npc/toblen-rochemont.jpg" },
+    { prenom: "Droop", nom: "", occupation: "Chef de clan", faction: "Clan Scraptop", lieu: "Bois de Padhiver", portrait: "npc/droop.png" },
+    { prenom: "Reidoth", nom: "", occupation: "Druide", faction: "Enclave d'Emeraude", lieu: "Bois de Padhiver", portrait: "npc/reidoth.jpg" },
+    { prenom: "Abella", nom: "Lokelani", occupation: "Chevalier", faction: "Compagnons", lieu: "Troisangliers", portrait: "npc/abella-lokelani.jpg" },
+    { prenom: "Fildo", nom: "Affûteplume", occupation: "Barde de Milil", faction: "", lieu: "Troisangliers", portrait: "npc/fildo-affuteplume.jpg" },
+    { prenom: "Gilthur", nom: "Helcral", occupation: "Chevalier", faction: "Poing Enflammé", lieu: "Troisangliers", portrait: "npc/gilthur-helcral.jpg" },
+    { prenom: "Ekemon", nom: "", occupation: "Serveur", faction: "", lieu: "Troisangliers", portrait: "npc/ekemon.jpg" },
+    { prenom: "Kalys", nom: "Tanker", occupation: "Paladin d'Ilmater", faction: "", lieu: "Troisangliers", portrait: "npc/kalys-tanker.jpg" },
+    { prenom: "Morla", nom: "Welby", occupation: "Marchand, Adepte de Waukyne", faction: "", lieu: "Troisangliers", portrait: "npc/morla-welby.jpg" },
+    { prenom: "Griselda", nom: "", occupation: "Fermière", faction: "", lieu: "Troisangliers", portrait: "npc/griselda.jpg" },
+    { prenom: "Oriana", nom: "Keelin", occupation: "Chevalier", faction: "Dragons Pourpres", lieu: "Troisangliers", portrait: "npc/oriana-keelin.jpg" },
+    { prenom: "Varis", nom: "Teinithra", occupation: "Enchanteur", faction: "", lieu: "Troisangliers", portrait: "npc/varis-teinithra.jpg" },
+    { prenom: "Tayla", nom: "Sharrington", occupation: "Garde-Forestière", faction: "", lieu: "Troisangliers", portrait: "npc/tayla-sharrington.jpg" },
+    { prenom: "Aru", nom: "", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/aru.jpg" },
+    { prenom: "Dosla", nom: "", occupation: "Magicienne", faction: "", lieu: "Yartar", portrait: "npc/dosla.jpg" },
+    { prenom: "Gavan", nom: "Ronnad", occupation: "Lieutenant des Boucliers de Yartar", faction: "", lieu: "Yartar", portrait: "npc/gavan-ronnad.jpg" },
+    { prenom: "Hildegarde", nom: "Lakkena", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/hildegarde-lakkena.jpg" },
+    { prenom: "Emil", nom: "Toranescu", occupation: "Chef de bande", faction: "Phalanges de Yartar", lieu: "Yartar", portrait: "npc/emil-toranescu.jpg" },
+    { prenom: "Magrea", nom: "", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/magrea.jpg" },
+    { prenom: "Lalita", nom: "Pétronille", occupation: "Marchande", faction: "", lieu: "Yartar", portrait: "npc/lalita-petronille.jpg" },
+    { prenom: "Urgazir", nom: "", occupation: "Mercenaire", faction: "Uthgardt", lieu: "Yartar", portrait: "npc/urgazir.jpg" },
+    { prenom: "Varana", nom: "'La Pie' Roncecolline", occupation: "Chef de bande", faction: "Phalanges de Yartar", lieu: "Yartar", portrait: "npc/varana-la-pie-roncecolline.jpg" },
+    { prenom: "Elvina", nom: "", occupation: "Farceuse", faction: "Enclave d'Emeraude", lieu: "Féerie", portrait: "npc/elvina.jpg" },
+    { prenom: "Polynomise", nom: "", occupation: "Championne", faction: "Cour de Verenestra", lieu: "Féerie", portrait: "npc/polynomise.jpg" },
+    { prenom: "Aerosclughpalar", nom: "", occupation: "Gardien de la Féerie", faction: "Enclave d'Emeraude", lieu: "Féerie", portrait: "npc/aerosclughpalar.jpg" },
+    { prenom: "Cumillas", nom: "", occupation: "Ivrogne", faction: "", lieu: "Féerie", portrait: "npc/cumillas.jpg" },
+    { prenom: "Meryas", nom: "Dansecoeur", occupation: "Etudiant", faction: "", lieu: "Lunargent", portrait: "npc/meryas-dansecoeur.jpg" },
+    { prenom: "Meriel", nom: "Qualimahar", occupation: "Capitaine de la Légion d'Argent", faction: "", lieu: "Lunargent", portrait: "npc/meriel-qualimahar.jpg" },
+    { prenom: "Thora", nom: "Brisefer", occupation: "Forgeronne", faction: "", lieu: "Lunargent", portrait: "npc/thora-brisefer.jpg" },
+    { prenom: "Nezznar", nom: "l'Araignée Noire", occupation: "Noble", faction: "T'sarran", lieu: "💀", portrait: "npc/nezznar-araignee-noire.png" },
+    { prenom: "Roi", nom: "Grol", occupation: "Roi", faction: "Clan des Dents-Pointues", lieu: "💀", portrait: "npc/roi-grol.jpg" },
+    { prenom: "Wirt", nom: "Ruthiol", occupation: "", faction: "", lieu: "💀", portrait: "npc/wirt-ruthiol.jpg" }
+  ];
+
   // ---- render ----
   var app = document.getElementById('app');
 
@@ -1004,6 +1066,7 @@
       case 'settings-character': return renderSettingsCharacter();
       case 'settings-grimoire': return renderSettingsGrimoire();
       case 'settings-load-character': return renderSettingsLoadCharacter();
+      case 'settings-codex': return renderSettingsCodex();
       default: return renderTracker();
     }
   }
@@ -1025,7 +1088,8 @@
     document.title = 'Suivi — ' + (profile().characterName || 'Personnage');
     var prevScroller = app.querySelector('[data-scroll-root]');
     var scrollTop = prevScroller ? prevScroller.scrollTop : 0;
-    var searchHadFocus = document.activeElement && document.activeElement.id === 'statsSearchInput';
+    var focusedSearchId = document.activeElement && (document.activeElement.id === 'statsSearchInput' || document.activeElement.id === 'codexSearchInput')
+      ? document.activeElement.id : null;
     app.innerHTML =
       '<div style="display:flex;flex-direction:column;height:100%">' +
         '<div style="flex:1;min-height:0;display:flex;flex-direction:column">' + renderPage() + '</div>' +
@@ -1051,7 +1115,7 @@
     }
     var nextScroller = app.querySelector('[data-scroll-root]');
     if (nextScroller) nextScroller.scrollTop = scrollTop;
-    bindEvents(searchHadFocus);
+    bindEvents(focusedSearchId);
   }
 
   // En-tête pliable/dépliable commun aux blocs du Tracker (Attaque, Ressources, Emplacements de
@@ -1489,7 +1553,8 @@
     var menuItems = [
       { view: 'settings-character', label: 'Paramétrer le Personnage' },
       { view: 'settings-grimoire', label: 'Paramétrer le Grimoire' },
-      { view: 'settings-load-character', label: 'Gestion des personnages' }
+      { view: 'settings-load-character', label: 'Gestion des personnages' },
+      { view: 'settings-codex', label: 'Codex' }
     ];
     var itemsHtml = menuItems.map(function (item) {
       return '<div data-action="nav" data-view="' + item.view + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;cursor:pointer;color:var(--text-main)">' +
@@ -1792,6 +1857,64 @@
     );
   }
 
+  // Tableau du Codex : une ligne compacte par PNJ (photo + nom sur la première ligne,
+  // occupation puis faction/lieu en dessous) plutôt qu'un <table> à 6 colonnes qui scrollerait
+  // horizontalement en plus du scroll vertical de la page — même arbitrage de geste imbriqué
+  // qui posait déjà problème sur les rangées de badges du Tracker (voir CLAUDE.md), évité ici en
+  // gardant tout sur un seul axe de scroll (vertical).
+  // Recherche du Codex : même principe que celle des compétences (renderStats()) — filtre en
+  // direct sur nom/prénom/fonction/lieu, classé par pertinence (correspondance exacte > début >
+  // contient) sur le meilleur des quatre champs, champ de saisie exclu de la présélection globale
+  // au focus (voir listener 'focusin') et focus préservé d'un re-render à l'autre (bindEvents()).
+  function renderSettingsCodex() {
+    var search = ui.codexSearch || '';
+    var searchLower = search.toLowerCase();
+
+    function fieldRank(value) {
+      var v = (value || '').toLowerCase();
+      if (v.indexOf(searchLower) === -1) return null;
+      if (v === searchLower) return 0;
+      if (v.indexOf(searchLower) === 0) return 1;
+      return 2;
+    }
+
+    function codexMatchRank(n) {
+      var ranks = [fieldRank(n.prenom), fieldRank(n.nom), fieldRank(n.occupation), fieldRank(n.lieu)]
+        .filter(function (r) { return r !== null; });
+      return ranks.length ? Math.min.apply(null, ranks) : null;
+    }
+
+    var filtered = CODEX_PNJ
+      .map(function (n) { return { npc: n, rank: codexMatchRank(n) }; })
+      .filter(function (x) { return x.rank !== null; })
+      .sort(function (a, b) { return a.rank - b.rank; })
+      .map(function (x) { return x.npc; });
+
+    var rowsHtml = filtered.length
+      ? filtered.map(function (n) {
+          var fullName = n.nom ? (n.prenom + ' ' + n.nom) : n.prenom;
+          var metaParts = [n.faction, n.lieu].filter(function (v) { return v; });
+          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(var(--border-tint),0.15)">' +
+            '<img src="' + escapeHtml(n.portrait) + '" alt="" style="flex:none;width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.3)"/>' +
+            '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">' +
+              '<div style="font-size:14px;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(fullName) + '</div>' +
+              (n.occupation ? '<div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(n.occupation) + '</div>' : '') +
+              (metaParts.length ? '<div style="font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(metaParts.join(' · ')) + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('')
+      : '<div style="padding:16px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun PNJ trouvé.</div>';
+
+    return (
+      '<div style="display:flex;flex-direction:column;height:100%;gap:14px;position:relative">' +
+        renderSettingsHeader('Codex') +
+        '<input id="codexSearchInput" type="text" value="' + escapeHtml(search) + '" placeholder="Rechercher un PNJ…" style="flex:none;height:52px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:10px;color:var(--text-main);font-size:16px;padding:0 16px;box-sizing:border-box"/>' +
+        '<div data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column">' + rowsHtml + '</div>' +
+        '<div id="codexResetBtn" data-action="reset-codex-view" style="position:absolute;top:0;right:0;width:36px;height:36px;border-radius:8px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);opacity:0;pointer-events:none;transition:opacity 150ms ease-out;z-index:5">' + iconClose() + '</div>' +
+      '</div>'
+    );
+  }
+
   function renderShortRestModal() {
     var p = profile();
     var checks = ui.shortRestChecks;
@@ -1909,7 +2032,7 @@
   }
 
   // ---- event binding ----
-  function bindEvents(searchHadFocus) {
+  function bindEvents(focusedSearchId) {
     app.querySelectorAll('[data-action]').forEach(function (el) {
       el.addEventListener('click', onAction);
     });
@@ -2052,7 +2175,7 @@
 
     var statsSearchInput = document.getElementById('statsSearchInput');
     if (statsSearchInput) {
-      if (searchHadFocus) {
+      if (focusedSearchId === 'statsSearchInput') {
         statsSearchInput.focus();
         var caret = statsSearchInput.value.length;
         statsSearchInput.setSelectionRange(caret, caret);
@@ -2080,6 +2203,31 @@
         updateStatsFocusUI();
         statsSearchInput.addEventListener('focus', updateStatsFocusUI);
         statsSearchInput.addEventListener('blur', updateStatsFocusUI);
+      }
+    }
+
+    var codexSearchInput = document.getElementById('codexSearchInput');
+    if (codexSearchInput) {
+      if (focusedSearchId === 'codexSearchInput') {
+        codexSearchInput.focus();
+        var codexCaret = codexSearchInput.value.length;
+        codexSearchInput.setSelectionRange(codexCaret, codexCaret);
+      }
+      codexSearchInput.addEventListener('input', function () {
+        ui.codexSearch = codexSearchInput.value;
+        render();
+      });
+
+      var codexResetBtn = document.getElementById('codexResetBtn');
+      if (codexResetBtn) {
+        var updateCodexFocusUI = function () {
+          var focused = document.activeElement === codexSearchInput;
+          codexResetBtn.style.opacity = focused ? '1' : '0';
+          codexResetBtn.style.pointerEvents = focused ? 'auto' : 'none';
+        };
+        updateCodexFocusUI();
+        codexSearchInput.addEventListener('focus', updateCodexFocusUI);
+        codexSearchInput.addEventListener('blur', updateCodexFocusUI);
       }
     }
 
@@ -2488,6 +2636,12 @@
         render();
         break;
 
+      case 'reset-codex-view':
+        ui.codexSearch = '';
+        if (document.activeElement && document.activeElement.id === 'codexSearchInput') document.activeElement.blur();
+        render();
+        break;
+
       case 'open-gold-modal':
         ui.goldModalDraft = profile().gold;
         ui.goldModalOpen = true;
@@ -2613,7 +2767,7 @@
   // présélectionne le contenu de tout champ texte au focus, pour faciliter la saisie directe
   // (la recherche de compétences est exclue : c'est un filtre en direct, pas une valeur à remplacer)
   app.addEventListener('focusin', function (e) {
-    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text' && e.target.id !== 'statsSearchInput') {
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text' && e.target.id !== 'statsSearchInput' && e.target.id !== 'codexSearchInput') {
       e.target.select();
     }
   });
