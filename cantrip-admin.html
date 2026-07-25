@@ -1475,7 +1475,7 @@ function deriveFullProfile(charId) {
 // ---- synchronisation Google Drive (bdd.json) — memes fonctions que index.html, dupliquees ----
 // Client ID OAuth d'appli web : destine a etre embarque dans le JS client, pas un secret.
 var GOOGLE_CLIENT_ID = '653846859488-9fkauatcjch80v83ngdvk95t17gphrq1.apps.googleusercontent.com';
-var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 var DRIVE_META_KEY = 'cantrip_drive_meta'; // { folderId, fileId } — partage avec index.html (meme origine)
 
 var driveTokenClient = null;

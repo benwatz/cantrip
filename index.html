@@ -600,7 +600,7 @@
   // Client ID OAuth d'appli web : destiné à être embarqué dans le JS client, pas un secret
   // (contrairement à un client secret, qui n'existe pas pour ce type de flux SPA).
   var GOOGLE_CLIENT_ID = '653846859488-9fkauatcjch80v83ngdvk95t17gphrq1.apps.googleusercontent.com';
-  var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
   var DRIVE_META_KEY = 'cantrip_drive_meta'; // { folderId, fileId } — partagé avec cantrip-admin.html (même origine)
 
   var driveTokenClient = null;
@@ -665,10 +665,14 @@
     }).then(function (res) { return res.json(); }).then(function (json) { return json.id; });
   }
 
-  // Avec le scope drive.file, l'app ne voit que les fichiers qu'elle a elle-même créés : au
-  // premier appel, elle crée son propre dossier "Cantrip" à la racine de "Mon Drive" plutôt que
-  // de chercher un dossier existant choisi par l'utilisateur (choix retenu pour éviter Google
-  // Picker et sa clé API séparée).
+  // Scope 'drive' (accès complet, pas 'drive.file') : nécessaire pour que le bdd.json créé sous
+  // un compte Google (ex. celui du MJ) reste accessible aux autres joueurs une fois partagé
+  // depuis l'interface Drive avec leur propre compte — avec 'drive.file', chaque compte ne
+  // verrait que les fichiers qu'il a lui-même créés, même partagés (bug corrigé juillet 2026 :
+  // "aucune sauvegarde... sur Drive" pour tout compte différent du créateur). Au premier appel
+  // sous un compte n'ayant pas encore de bdd.json, l'app crée son propre dossier "Cantrip" à la
+  // racine de "Mon Drive" plutôt que de chercher un dossier existant choisi par l'utilisateur
+  // (choix retenu pour éviter Google Picker et sa clé API séparée).
   function driveEnsureFile(token) {
     var meta = driveMeta();
     if (meta.fileId) return Promise.resolve(meta.fileId);
