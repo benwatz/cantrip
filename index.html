@@ -1174,25 +1174,30 @@
     '</div>';
   }
 
+  // Layout en 3 colonnes fixes de tailles égales (grid-template-columns partagé par toutes les
+  // lignes, donc les valeurs s'alignent verticalement d'une arme à l'autre) : Nom | Ciblage |
+  // Dégâts. La colonne Dégâts empile dés et type sur deux lignes plutôt que de les mettre côte à
+  // côte, pour que le type (ex. "Contondant") s'affiche toujours en entier sans ellipsis, quelle
+  // que soit la longueur des dés à côté (juillet 2026, alignement demandé par l'utilisateur).
   function renderAttackRow(atk) {
     var rangeSuffix = (!atk.melee && atk.rangeMeters > 0)
       ? ' <span style="font-size:11px;font-weight:400;color:var(--text-muted)">(' + atk.rangeMeters + 'm)</span>'
       : '';
-    var damageBits = [];
-    if (atk.damageDice) damageBits.push(escapeHtml(atk.damageDice) + (atk.damageBonus ? formatSigned(atk.damageBonus) : ''));
-    if (atk.damageType) damageBits.push(escapeHtml(atk.damageType));
-    var damageText = damageBits.join(' · ');
-    // Groupe ciblage (icône cible + bonus au toucher) resserré (gap:4px, contre 9px pour le
-    // reste de la ligne) pour bien l'associer visuellement, avec une marge à droite pour
-    // l'écarter davantage du groupe dégâts (dés + type) qui le suit.
-    return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0">' +
-      '<div style="flex:none;width:16px;height:16px;color:var(--text-muted)">' + (atk.melee ? iconSword() : iconBow()) + '</div>' +
-      '<div style="flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(atk.name) + rangeSuffix + '</div>' +
-      '<div style="flex:none;display:flex;align-items:center;gap:4px;margin-right:' + (damageText ? '16px' : '0') + '">' +
+    var diceText = atk.damageDice ? (escapeHtml(atk.damageDice) + (atk.damageBonus ? formatSigned(atk.damageBonus) : '')) : '';
+    var typeText = atk.damageType ? escapeHtml(atk.damageType) : '';
+    return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;gap:6px;padding:9px 0">' +
+      '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
+        '<div style="flex:none;width:16px;height:16px;color:var(--text-muted)">' + (atk.melee ? iconSword() : iconBow()) + '</div>' +
+        '<div style="min-width:0;font-size:12.5px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(atk.name) + rangeSuffix + '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:4px;min-width:0">' +
         '<div style="flex:none;width:14px;height:14px;color:var(--text-muted)">' + ICON_TARGET + '</div>' +
         '<div style="flex:none;font-size:14px;color:var(--accent-blue-text);font-weight:700">' + formatSigned(atk.attackBonus) + '</div>' +
       '</div>' +
-      (damageText ? '<div style="flex:none;font-size:13px;color:var(--text-muted);max-width:110px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + damageText + '</div>' : '') +
+      '<div style="display:flex;flex-direction:column;gap:1px;min-width:0">' +
+        (diceText ? '<div style="font-size:12.5px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + diceText + '</div>' : '') +
+        (typeText ? '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + typeText + '</div>' : '') +
+      '</div>' +
     '</div>';
   }
 
@@ -1671,7 +1676,7 @@
       return '<div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--bg-card);border-bottom:1px solid rgba(var(--border-tint),0.14)">' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           reorderHtml +
-          '<input type="text" data-action="attack-name" data-id="' + atk.id + '" value="' + escapeHtml(atk.name) + '" placeholder="Nom de l\'arme" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;padding:0 10px;box-sizing:border-box"/>' +
+          '<input type="text" data-action="attack-name" data-id="' + atk.id + '" value="' + escapeHtml(atk.name) + '" placeholder="Nom de l\'arme" maxlength="24" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;padding:0 10px;box-sizing:border-box"/>' +
           '<div data-action="remove-attack" data-id="' + atk.id + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;' + lockedRowStyle + '">' +
