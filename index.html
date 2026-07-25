@@ -1925,7 +1925,7 @@
       ? filtered.map(function (n) {
           var fullName = n.nom ? (n.prenom + ' ' + n.nom) : n.prenom;
           var metaParts = [n.faction, n.lieu].filter(function (v) { return v; });
-          return '<div data-action="open-codex-preview" data-portrait="' + escapeHtml(n.portrait) + '" data-name="' + escapeHtml(fullName) + '" style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(var(--border-tint),0.15);cursor:pointer">' +
+          return '<div data-action="open-codex-preview" data-codex-index="' + CODEX_PNJ.indexOf(n) + '" style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(var(--border-tint),0.15);cursor:pointer">' +
             '<img src="' + escapeHtml(n.portrait) + '" alt="" style="flex:none;width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.3)"/>' +
             '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">' +
               '<div style="font-size:14px;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(fullName) + '</div>' +
@@ -1959,7 +1959,11 @@
     return '<div class="codex-preview-backdrop ' + backdropAnim + '" data-action="close-codex-preview">' +
       '<div class="codex-preview-card ' + cardAnim + '">' +
         '<img src="' + escapeHtml(p.portrait) + '" alt="" style="width:min(70vw,300px);height:min(70vw,300px);object-fit:cover;border-radius:16px;border:1px solid rgba(255,255,255,0.25);box-shadow:0 12px 32px rgba(0,0,0,0.5)"/>' +
-        '<div style="font-size:18px;font-weight:700;color:#fff;text-align:center" class="font-cinzel">' + escapeHtml(p.name) + '</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
+          '<div style="font-size:18px;font-weight:700;color:#fff;text-align:center" class="font-cinzel">' + escapeHtml(p.name) + '</div>' +
+          (p.occupation ? '<div style="font-size:14px;color:rgba(255,255,255,0.75);text-align:center">' + escapeHtml(p.occupation) + '</div>' : '') +
+          (p.meta ? '<div style="font-size:12px;color:rgba(255,255,255,0.55);text-align:center">' + escapeHtml(p.meta) + '</div>' : '') +
+        '</div>' +
         '<div data-action="close-codex-preview" style="width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer">' + iconClose() + '</div>' +
       '</div>' +
     '</div>';
@@ -2704,15 +2708,19 @@
       case 'dismiss-concentration-toast':
         dismissConcentrationToast();
         break;
-      case 'open-codex-preview':
+      case 'open-codex-preview': {
+        var codexNpc = CODEX_PNJ[parseInt(e.currentTarget.getAttribute('data-codex-index'), 10)];
         ui.codexPreview = {
-          portrait: e.currentTarget.getAttribute('data-portrait'),
-          name: e.currentTarget.getAttribute('data-name'),
+          portrait: codexNpc.portrait,
+          name: codexNpc.nom ? (codexNpc.prenom + ' ' + codexNpc.nom) : codexNpc.prenom,
+          occupation: codexNpc.occupation,
+          meta: [codexNpc.faction, codexNpc.lieu].filter(function (v) { return v; }).join(' · '),
           leaving: false
         };
         ui.codexPreviewEnterPending = true;
         render();
         break;
+      }
       case 'close-codex-preview':
         startLeavingCodexPreview();
         break;
