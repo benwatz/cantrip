@@ -1055,12 +1055,23 @@
   }
 
   // En-tête pliable/dépliable commun aux blocs du Tracker (Attaque, Ressources, Emplacements de
-  // sorts) : chevron (pivote de 90° selon l'état) + libellé, tap togglant ui.trackerCollapsed[blockKey].
+  // sorts) : bouton chevron (même gabarit que les boutons −/+ des compétences, pivote de 90°
+  // selon l'état) suivi du libellé, tap togglant ui.trackerCollapsed[blockKey].
   function renderTrackerBlockHeader(label, blockKey) {
     var collapsed = ui.trackerCollapsed[blockKey];
-    return '<div data-action="toggle-tracker-block" data-block="' + blockKey + '" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none">' +
-      '<div style="flex:none;width:14px;height:14px;display:flex;align-items:center;justify-content:center;color:var(--text-label);transform:rotate(' + (collapsed ? '0' : '90') + 'deg);transition:transform 0.15s">' + iconChevronRight(14) + '</div>' +
-      '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">' + label + '</div>' +
+    return '<div data-action="toggle-tracker-block" data-block="' + blockKey + '" style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">' +
+      '<div style="flex:none;width:34px;height:34px;border-radius:8px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);display:flex;align-items:center;justify-content:center;transform:rotate(' + (collapsed ? '0' : '90') + 'deg);transition:transform 0.15s">' + iconChevronRight(16) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:var(--text-label);text-transform:uppercase;letter-spacing:0.07em">' + label + '</div>' +
+    '</div>';
+  }
+
+  // Carte unifiée (fond + bordure, même gabarit que le bloc Points de vie) englobant l'en-tête
+  // pliable et le contenu d'un bloc du Tracker ; le contenu est simplement omis quand replié.
+  function renderTrackerBlock(label, blockKey, bodyHtml) {
+    var collapsed = ui.trackerCollapsed[blockKey];
+    return '<div style="background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.22);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">' +
+      renderTrackerBlockHeader(label, blockKey) +
+      (collapsed ? '' : bodyHtml) +
     '</div>';
   }
 
@@ -1111,17 +1122,11 @@
           '</div>';
       }).join('');
 
-    var attacksHtml = p.attacks.length
-      ? '<div style="display:flex;flex-direction:column;gap:6px">' +
-          renderTrackerBlockHeader('Attaque', 'attacks') +
-          (ui.trackerCollapsed.attacks ? '' :
-            '<div style="background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;padding:2px 12px">' +
-              p.attacks.map(function (atk, i) {
-                return (i > 0 ? '<hr style="border:none;border-top:1px solid rgba(var(--border-tint),0.14);margin:0">' : '') + renderAttackRow(atk);
-              }).join('') +
-            '</div>') +
-        '</div>'
-      : '';
+    var attacksBodyHtml = p.attacks.map(function (atk, i) {
+      return (i > 0 ? '<hr style="border:none;border-top:1px solid rgba(var(--border-tint),0.14);margin:0">' : '') + renderAttackRow(atk);
+    }).join('');
+
+    var attacksHtml = p.attacks.length ? renderTrackerBlock('Attaque', 'attacks', attacksBodyHtml) : '';
 
     var classResourcesHtml = p.classResources.map(function (cr) {
       if (cr.type === 'counter') {
@@ -1143,17 +1148,10 @@
         '</div>';
     }).join('<div style="height:10px"></div>');
 
-    var classHtml = p.classResources.length
-      ? '<div style="display:flex;flex-direction:column;gap:8px">' +
-          renderTrackerBlockHeader('Ressources', 'resources') +
-          (ui.trackerCollapsed.resources ? '' : classResourcesHtml) +
-        '</div>'
-      : '';
+    var classHtml = p.classResources.length ? renderTrackerBlock('Ressources', 'resources', classResourcesHtml) : '';
 
-    var spellSlotsHtml = '<div style="display:flex;flex-direction:column;gap:8px">' +
-      renderTrackerBlockHeader('Emplacements de sorts', 'spellSlots') +
-      (ui.trackerCollapsed.spellSlots ? '' : (spellGroupsHtml || '<div style="font-size:12px;color:var(--text-dim)">Aucun niveau actif - configurez-les dans les paramètres.</div>')) +
-      '</div>';
+    var spellSlotsBodyHtml = spellGroupsHtml || '<div style="font-size:12px;color:var(--text-dim)">Aucun niveau actif - configurez-les dans les paramètres.</div>';
+    var spellSlotsHtml = renderTrackerBlock('Emplacements de sorts', 'spellSlots', spellSlotsBodyHtml);
 
     var combatStatsHtml = [
       { key: 'ac', label: 'CA', display: p.combatStats.ac, inputValue: p.combatStats.ac, inputMode: 'numeric', pattern: '[0-9]*' },

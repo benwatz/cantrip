@@ -56,15 +56,22 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    temporaire — `combatStatInput`, focus + sélection auto, `blur`/Entrée valide et appelle
    `saveState()` directement, pas de brouillon différé contrairement à Paramétrer le Personnage).
    **Blocs pliables/dépliables** (juillet 2026) : "Attaque", "Ressources" et "Emplacements de
-   sorts" ont chacun un en-tête cliquable (`renderTrackerBlockHeader()` — chevron `iconChevronRight
-   (14)` qui pivote de 90° selon l'état, suivi du libellé) togglant `ui.trackerCollapsed.{attacks|
+   sorts" sont chacun une **carte unifiée** (`renderTrackerBlock()` — même gabarit visuel que le
+   bloc Points de vie : `background:var(--bg-card)`, bordure, `border-radius:16px`, padding
+   `14px 16px`) englobant l'en-tête et le contenu, plutôt qu'un en-tête nu au-dessus d'un contenu
+   à part ; le contenu est simplement omis du rendu (pas de carte vide en dessous) quand le bloc
+   est replié. L'en-tête (`renderTrackerBlockHeader()`) place un **bouton chevron** avant le
+   libellé — 34×34, `border-radius:8px`, fond/bordure teintés `rgba(var(--border-tint),…)`, même
+   gabarit que les boutons −/+ d'édition des compétences dans Paramétrer le Personnage — qui
+   pivote de 90° selon l'état (`iconChevronRight(16)`), suivi du libellé agrandi à 14px/700 (au
+   lieu de 12px/600 pour les autres labels de section). Togglé via `ui.trackerCollapsed.{attacks|
    resources|spellSlots}` (objet éphémère, un booléen indépendant par bloc, non persisté —
-   redémarre entièrement déplié à chaque session), pour gagner de la place à l'écran si besoin ; le
-   contenu du bloc est simplement omis du rendu quand replié (`data-action="toggle-tracker-block"`,
-   `data-block` portant la clé). `iconChevronRight()` prend un paramètre `size` optionnel (défaut
+   redémarre entièrement déplié à chaque session), `data-action="toggle-tracker-block"` /
+   `data-block` portant la clé. `iconChevronRight()` prend un paramètre `size` optionnel (défaut
    18, comme `iconArrowLeft()`) pour que le SVG rendu corresponde exactement à la taille du
    conteneur qui l'accueille — un mismatch (SVG 18px dans un conteneur 14px) désalignait
-   visuellement le chevron par rapport au texte (bug corrigé juillet 2026).
+   visuellement le chevron par rapport au texte (bug corrigé juillet 2026). Le bloc PV n'a
+   volontairement pas été touché par ce traitement (déjà une carte à part entière, non pliable).
    **Bloc Attaque** (`profile.attacks`, tableau 0..n d'objets `{ id, name, melee, rangeMeters,
    attackBonus, damageDice, damageBonus, damageType }`, lecture seule ici — édité dans
    Paramétrer le Personnage) — masqué entièrement si `attacks` est vide (comme les ressources de
