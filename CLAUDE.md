@@ -43,16 +43,28 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    .portrait`, cercle 38px) à gauche du nom, puis PV (bloc fusionné avec bouclier temporaire,
    boutons −/+ de part et d'autre). Le reste de la page est **entièrement inclus dans la zone
    scrollable** `[data-scroll-root]` plutôt que fixé en bas de l'écran (changement de juillet
-   2026) : bloc "Attaque" (armes uniquement, voir ci-dessous), ressource(s) de classe (un bloc de
-   badges par ressource configurée, voir Paramètres ci-dessous), emplacements de sorts groupés par
-   niveau en badges circulaires, bouton "Repos", puis en tout dernier la ligne de 3 tuiles
-   CA / Initiative / Déplacement (`profile.combatStats: { ac, initiative, speed }`) — ce
-   regroupement dans le scroll évite qu'ils occupent en permanence de la place à l'écran.
-   Éditables directement ici en plus de Paramètres (juillet 2026) : tap sur une valeur
-   (`data-action="edit-combat-stat"`) pour la remplacer par un champ texte (`ui.editingCombatStat`,
-   même pattern clic-pour-éditer que le max de PV/bouclier temporaire — `combatStatInput`, focus +
-   sélection auto, `blur`/Entrée valide et appelle `saveState()` directement, pas de brouillon
-   différé contrairement à Paramétrer le Personnage).
+   2026), dans cet ordre : bloc "Attaque" (armes uniquement, voir ci-dessous), bloc "Ressources"
+   (un bloc de badges/compteur par ressource de classe configurée, voir Paramètres ci-dessous),
+   bloc "Emplacements de sorts" (groupés par niveau en badges circulaires), la ligne de 3 tuiles
+   CA / Initiative / Déplacement (`profile.combatStats: { ac, initiative, speed }`), puis en tout
+   dernier le bouton "Repos" (ordre changé en juillet 2026 pour que Repos suive directement les
+   tuiles de combat) — ce regroupement dans le scroll évite qu'ils occupent en permanence de la
+   place à l'écran.
+   Éditables directement ici en plus de Paramètres (juillet 2026) : tap sur une valeur des tuiles
+   CA/Initiative/Déplacement (`data-action="edit-combat-stat"`) pour la remplacer par un champ
+   texte (`ui.editingCombatStat`, même pattern clic-pour-éditer que le max de PV/bouclier
+   temporaire — `combatStatInput`, focus + sélection auto, `blur`/Entrée valide et appelle
+   `saveState()` directement, pas de brouillon différé contrairement à Paramétrer le Personnage).
+   **Blocs pliables/dépliables** (juillet 2026) : "Attaque", "Ressources" et "Emplacements de
+   sorts" ont chacun un en-tête cliquable (`renderTrackerBlockHeader()` — chevron `iconChevronRight
+   (14)` qui pivote de 90° selon l'état, suivi du libellé) togglant `ui.trackerCollapsed.{attacks|
+   resources|spellSlots}` (objet éphémère, un booléen indépendant par bloc, non persisté —
+   redémarre entièrement déplié à chaque session), pour gagner de la place à l'écran si besoin ; le
+   contenu du bloc est simplement omis du rendu quand replié (`data-action="toggle-tracker-block"`,
+   `data-block` portant la clé). `iconChevronRight()` prend un paramètre `size` optionnel (défaut
+   18, comme `iconArrowLeft()`) pour que le SVG rendu corresponde exactement à la taille du
+   conteneur qui l'accueille — un mismatch (SVG 18px dans un conteneur 14px) désalignait
+   visuellement le chevron par rapport au texte (bug corrigé juillet 2026).
    **Bloc Attaque** (`profile.attacks`, tableau 0..n d'objets `{ id, name, melee, rangeMeters,
    attackBonus, damageDice, damageBonus, damageType }`, lecture seule ici — édité dans
    Paramétrer le Personnage) — masqué entièrement si `attacks` est vide (comme les ressources de
