@@ -731,7 +731,8 @@
     driveError: null, // dernier message d'erreur Drive à afficher sur "Charger un personnage"
     driveToast: null, // null | { message: string, leaving: bool } — confirmation de succès Charger/Sauvegarder
     driveToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
-    driveConfirm: null // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Drive est ouverte
+    driveConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Drive est ouverte
+    attacksCollapsed: false // replie la zone d'affichage du bloc Attaque du Tracker
   };
 
   function profile() { return state.profiles[state.activeProfileIndex]; }
@@ -1100,12 +1101,16 @@
 
     var attacksHtml = p.attacks.length
       ? '<div style="display:flex;flex-direction:column;gap:6px">' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">Attaque</div>' +
-          '<div style="background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;padding:2px 12px">' +
-            p.attacks.map(function (atk, i) {
-              return (i > 0 ? '<hr style="border:none;border-top:1px solid rgba(var(--border-tint),0.14);margin:0">' : '') + renderAttackRow(atk);
-            }).join('') +
+          '<div data-action="toggle-attacks-collapsed" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none">' +
+            '<div style="width:14px;height:14px;color:var(--text-label);transform:rotate(' + (ui.attacksCollapsed ? '0' : '90') + 'deg);transition:transform 0.15s">' + iconChevronRight() + '</div>' +
+            '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">Attaque</div>' +
           '</div>' +
+          (ui.attacksCollapsed ? '' :
+            '<div style="background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;padding:2px 12px">' +
+              p.attacks.map(function (atk, i) {
+                return (i > 0 ? '<hr style="border:none;border-top:1px solid rgba(var(--border-tint),0.14);margin:0">' : '') + renderAttackRow(atk);
+              }).join('') +
+            '</div>') +
         '</div>'
       : '';
 
@@ -2415,6 +2420,11 @@
       case 'toggle-inspiration': {
         profile().inspiration = !profile().inspiration;
         saveState(); render();
+        break;
+      }
+      case 'toggle-attacks-collapsed': {
+        ui.attacksCollapsed = !ui.attacksCollapsed;
+        render();
         break;
       }
       case 'skill-inc': {
