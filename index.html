@@ -1408,13 +1408,13 @@
     { key: 'reaction', label: 'Réaction', prefix: 'RÉACTION', style: SPELL_TYPE_STYLES['RÉACTION'] }
   ];
 
-  // Filtre supplémentaire du Grimoire, ajouté après Réaction uniquement pour Deneor (système de
-  // préparation de sorts, sans objet pour Calix). Contrairement à Action/Bonus/Réaction ce n'est
-  // pas un filtre de type (pas de "prefix", donc ignoré par spellMatchesGrimoireFilters) : il bascule
-  // la liste affichée entre "sorts préparés" (par défaut) et "sorts non préparés", géré séparément
-  // dans renderGrimoire(). Rendu avec le même gabarit de chip et le même data-action=
-  // "toggle-grimoire-filter"/ui.grimoireFilters que les filtres de type : cliquable et cumulable
-  // indépendamment des autres, comme eux.
+  // Filtre supplémentaire du Grimoire, uniquement pour Deneor (système de préparation de sorts,
+  // sans objet pour Calix), rendu dans la rangée des onglets de niveau (après "Classe") plutôt
+  // qu'avec les filtres de type Action/Bonus/Réaction. Contrairement à ceux-ci ce n'est pas un
+  // filtre de type (pas de "prefix", donc ignoré par spellMatchesGrimoireFilters) : il bascule la
+  // liste affichée entre "sorts préparés" (par défaut) et "sorts non préparés", géré séparément
+  // dans renderGrimoire(). Même data-action="toggle-grimoire-filter"/ui.grimoireFilters que les
+  // filtres de type : cliquable et cumulable indépendamment des autres, comme eux.
   var GRIMOIRE_NOT_PREPARED_FILTER = { key: 'notPrepared', label: 'Non préparé', style: 'background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.6);color:var(--accent-red-text);' };
 
   function spellMatchesGrimoireFilters(spell) {
@@ -1502,13 +1502,21 @@
     var tabsHtml = grimoireTabsHtml(tabs);
 
     var isDeneor = state.activeCharacterId === 'deneor';
-    var grimoireFilterChips = isDeneor ? GRIMOIRE_FILTERS.concat([GRIMOIRE_NOT_PREPARED_FILTER]) : GRIMOIRE_FILTERS;
-    var filterChipsHtml = grimoireFilterChips.map(function (f) {
+    var filterChipsHtml = GRIMOIRE_FILTERS.map(function (f) {
       var active = !!ui.grimoireFilters[f.key];
       return '<div data-action="toggle-grimoire-filter" data-filter="' + f.key + '" style="flex:none;height:26px;padding:0 10px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:0.02em;cursor:pointer;user-select:none;' +
         (active ? f.style : 'background:transparent;border:1px solid rgba(var(--border-tint),0.25);color:var(--text-dim);') +
         '">' + escapeHtml(f.label) + '</div>';
     }).join('');
+
+    // Chip "Non préparé" affiché à la suite des onglets de niveau (pas dans la ligne de filtres de
+    // type Action/Bonus/Réaction) : même gabarit visuel que les onglets (32px, border-radius:16px,
+    // 12px) pour s'intégrer à cette rangée plutôt qu'à celle des filtres de type.
+    var notPreparedChipHtml = isDeneor
+      ? '<div data-action="toggle-grimoire-filter" data-filter="' + GRIMOIRE_NOT_PREPARED_FILTER.key + '" style="flex:none;height:32px;padding:0 12px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+        (ui.grimoireFilters.notPrepared ? GRIMOIRE_NOT_PREPARED_FILTER.style : 'background:transparent;border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
+        '">' + escapeHtml(GRIMOIRE_NOT_PREPARED_FILTER.label) + '</div>'
+      : '';
 
     var matchingSections = activeSpellbook().sections.filter(function (s) { return s.level === ui.grimoireTab; });
     var sectionsWithSpells = matchingSections.map(function (s) {
@@ -1538,7 +1546,7 @@
           '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px" class="font-cinzel">Grimoire</div>' +
           '<div style="display:flex;gap:6px">' + filterChipsHtml + '</div>' +
         '</div>' +
-        '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
+        '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + notPreparedChipHtml + '</div>' +
         '<div id="grimoireSwipe" data-scroll-root class="' + (animDirection === 'next' ? 'grimoire-anim-next' : animDirection === 'prev' ? 'grimoire-anim-prev' : '') + '" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
         (isDeneor
           ? '<div id="grimoirePrepareFab" data-action="open-grimoire-prepare" data-back="grimoire" style="position:absolute;left:0;right:0;bottom:0;height:48px;border-radius:10px;background:var(--border-strong);color:var(--ink-bright);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);transition:opacity 200ms ease-out" class="font-cinzel">Préparer mes sorts</div>'
