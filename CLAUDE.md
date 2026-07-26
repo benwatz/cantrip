@@ -45,16 +45,23 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    scrollable** `[data-scroll-root]` plutôt que fixé en bas de l'écran (changement de juillet
    2026), dans cet ordre : bloc "Attaque" (armes uniquement, voir ci-dessous), bloc "Ressources"
    (un bloc de badges/compteur par ressource de classe configurée, voir Paramètres ci-dessous),
-   bloc "Emplacements de sorts" (groupés par niveau en badges circulaires), la ligne de 3 tuiles
-   CA / Initiative / Déplacement (`profile.combatStats: { ac, initiative, speed }`), puis en tout
-   dernier le bouton "Repos" (ordre changé en juillet 2026 pour que Repos suive directement les
-   tuiles de combat) — ce regroupement dans le scroll évite qu'ils occupent en permanence de la
-   place à l'écran.
-   Éditables directement ici en plus de Paramètres (juillet 2026) : tap sur une valeur des tuiles
-   CA/Initiative/Déplacement (`data-action="edit-combat-stat"`) pour la remplacer par un champ
-   texte (`ui.editingCombatStat`, même pattern clic-pour-éditer que le max de PV/bouclier
-   temporaire — `combatStatInput`, focus + sélection auto, `blur`/Entrée valide et appelle
-   `saveState()` directement, pas de brouillon différé contrairement à Paramétrer le Personnage).
+   bloc "Emplacements de sorts" (groupés par niveau en badges circulaires), la grille de 6 tuiles
+   CA / Initiative / Déplacement / DD Sauv / Sorts / Dés de vie (`profile.combatStats: { ac,
+   initiative, speed, spellSaveDc, spellAttackBonus, hitDice }`, juillet 2026 pour les 3 dernières
+   — grille `grid-template-columns:repeat(3,1fr)` à 6 tuiles, la 2e rangée se forme par
+   l'auto-wrap CSS plutôt qu'un second bloc dédié), puis en tout dernier le bouton "Repos" (ordre
+   changé en juillet 2026 pour que Repos suive directement les tuiles de combat) — ce regroupement
+   dans le scroll évite qu'ils occupent en permanence de la place à l'écran.
+   Éditables directement ici en plus de Paramètres (juillet 2026) : tap sur une valeur d'une tuile
+   (`data-action="edit-combat-stat"`) pour la remplacer par un champ texte (`ui.editingCombatStat`,
+   même pattern clic-pour-éditer que le max de PV/bouclier temporaire — `combatStatInput`, focus +
+   sélection auto, `blur`/Entrée valide et appelle `saveState()` directement, pas de brouillon
+   différé contrairement à Paramétrer le Personnage). `ac`/`speed`/`spellSaveDc` sont non signés
+   (0-99), `initiative`/`spellAttackBonus` sont signés (-99 à 99, `formatSigned()`), et `hitDice`
+   est un champ texte libre (ex. "5d8", pas de calcul/plafond — même esprit que `damageDice` sur
+   les attaques) : ces trois familles sont distinguées explicitement dans le handler `blur` de
+   `combatStatInput` (Tracker) et dans le listener `data-action="combat-input"` (Paramétrer le
+   Personnage), `hitDice` court-circuitant `toInt()`/`clamp()` pour stocker la valeur brute.
    **Blocs pliables/dépliables** (juillet 2026) : "Attaque", "Ressources" et "Emplacements de
    sorts" sont chacun une **carte unifiée** (`renderTrackerBlock()` — même gabarit visuel que le
    bloc Points de vie : `background:var(--bg-card)`, bordure, `border-radius:16px`, padding
@@ -223,8 +230,9 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    plus de niveau intermédiaire "Paramétrer l'application" depuis juillet 2026 (l'écran ne servait
    plus qu'à ça après le retrait de l'export/import JSON, voir plus bas).
    - **Paramétrer le Personnage** (`renderSettingsCharacter()`) — nom du personnage,
-     CA/Initiative/Déplacement (`data-action="combat-input"`, Initiative signée via
-     `formatSigned()`, CA/Déplacement non signés), liste d'attaques (voir ci-dessous), config des
+     CA/Initiative/Déplacement/DD Sauv/Bonus aux sorts/Dés de vie (`data-action="combat-input"`,
+     Initiative et Bonus aux sorts signés via `formatSigned()`, CA/Déplacement/DD Sauv non signés,
+     Dés de vie en texte libre, ex. "5d8"), liste d'attaques (voir ci-dessous), config des
      emplacements de sorts et des ressources de classe, saisie des caractéristiques/compétences.
      Contenu en flux continu, sans titres de sous-section, séparé par de simples `<hr>` légers
      (`SETTINGS_SEPARATOR`) entre les blocs.

@@ -523,7 +523,7 @@ function defaultSkillsAdmin() {
 var SEED_PROFILES = {
   calix: {
     hp: { current: 42, max: 42, temp: 0 },
-    combatStats: { ac: 15, initiative: 3, speed: 9 },
+    combatStats: { ac: 15, initiative: 3, speed: 9, spellSaveDc: 10, spellAttackBonus: 0, hitDice: '' },
     concentration: false,
     inspiration: true,
     attacks: [],
@@ -568,7 +568,7 @@ var SEED_PROFILES = {
   },
   deneor: {
     hp: { current: 73, max: 73, temp: 0 },
-    combatStats: { ac: 23, initiative: 4, speed: 9 },
+    combatStats: { ac: 23, initiative: 4, speed: 9, spellSaveDc: 10, spellAttackBonus: 0, hitDice: '' },
     concentration: false,
     inspiration: false,
     attacks: [],
@@ -635,10 +635,13 @@ function sanitizeAdminProfile(p) {
   p.hp.current = clamp(p.hp.current, 0, p.hp.max);
   if (typeof p.hp.temp !== 'number' || isNaN(p.hp.temp)) p.hp.temp = 0;
   p.hp.temp = clamp(p.hp.temp, 0, 999);
-  if (!p.combatStats || typeof p.combatStats !== 'object') p.combatStats = { ac: 10, initiative: 0, speed: 9 };
+  if (!p.combatStats || typeof p.combatStats !== 'object') p.combatStats = { ac: 10, initiative: 0, speed: 9, spellSaveDc: 10, spellAttackBonus: 0, hitDice: '' };
   if (typeof p.combatStats.ac !== 'number' || isNaN(p.combatStats.ac)) p.combatStats.ac = 10;
   if (typeof p.combatStats.initiative !== 'number' || isNaN(p.combatStats.initiative)) p.combatStats.initiative = 0;
   if (typeof p.combatStats.speed !== 'number' || isNaN(p.combatStats.speed)) p.combatStats.speed = 9;
+  if (typeof p.combatStats.spellSaveDc !== 'number' || isNaN(p.combatStats.spellSaveDc)) p.combatStats.spellSaveDc = 10;
+  if (typeof p.combatStats.spellAttackBonus !== 'number' || isNaN(p.combatStats.spellAttackBonus)) p.combatStats.spellAttackBonus = 0;
+  if (typeof p.combatStats.hitDice !== 'string') p.combatStats.hitDice = '';
   if (typeof p.concentration !== 'boolean') p.concentration = false;
   if (typeof p.inspiration !== 'boolean') p.inspiration = false;
   if (!Array.isArray(p.attacks)) p.attacks = [];
@@ -878,6 +881,10 @@ function pField(label, action, key, value, signed) {
   return '<div class="pfield"><label>' + label + '</label>' +
     '<input type="text" inputmode="' + (signed ? 'text' : 'numeric') + '" pattern="' + (signed ? '-?[0-9]*' : '[0-9]*') + '" class="' + (signed ? 'psigned' : 'pnum') + '" data-action="' + action + '" data-key="' + key + '" value="' + (signed ? formatSigned(value) : value) + '"/></div>';
 }
+function pTextField(label, action, key, value, placeholder) {
+  return '<div class="pfield"><label>' + label + '</label>' +
+    '<input type="text" class="pnum" data-action="' + action + '" data-key="' + key + '" value="' + escapeHtml(value) + '" placeholder="' + escapeHtml(placeholder || '') + '"/></div>';
+}
 
 function renderPersonnage() {
   var p = personProfile();
@@ -892,6 +899,9 @@ function renderPersonnage() {
     pField('CA', 'p-combat', 'ac', p.combatStats.ac, false) +
     pField('Initiative', 'p-combat', 'initiative', p.combatStats.initiative, true) +
     pField('Déplacement (m)', 'p-combat', 'speed', p.combatStats.speed, false) +
+    pField('DD Sauv', 'p-combat', 'spellSaveDc', p.combatStats.spellSaveDc, false) +
+    pField('Bonus aux sorts', 'p-combat', 'spellAttackBonus', p.combatStats.spellAttackBonus, true) +
+    pTextField('Dés de vie', 'p-combat', 'hitDice', p.combatStats.hitDice, '5d8') +
     '</div></div>';
 
   var togglesHtml = '<div class="psec"><div class="psec-label">États initiaux</div><div class="pcard">' +
@@ -1019,8 +1029,12 @@ function bindPersonnageEvents() {
   panel.querySelectorAll('[data-action="p-combat"]').forEach(function (el) {
     el.addEventListener('change', function () {
       var key = el.getAttribute('data-key');
-      var min = key === 'initiative' ? -99 : 0;
-      p.combatStats[key] = clamp(toInt(el.value, p.combatStats[key]), min, 99);
+      if (key === 'hitDice') {
+        p.combatStats.hitDice = el.value;
+      } else {
+        var min = (key === 'initiative' || key === 'spellAttackBonus') ? -99 : 0;
+        p.combatStats[key] = clamp(toInt(el.value, p.combatStats[key]), min, 99);
+      }
       saveState(); render();
     });
   });
@@ -1449,7 +1463,7 @@ function deriveFullProfile(charId) {
   return {
     characterName: CHARACTER_NAMES[charId],
     hp: { current: p.hp.current, max: p.hp.max, temp: p.hp.temp },
-    combatStats: { ac: p.combatStats.ac, initiative: p.combatStats.initiative, speed: p.combatStats.speed },
+    combatStats: { ac: p.combatStats.ac, initiative: p.combatStats.initiative, speed: p.combatStats.speed, spellSaveDc: p.combatStats.spellSaveDc, spellAttackBonus: p.combatStats.spellAttackBonus, hitDice: p.combatStats.hitDice },
     spellLevels: p.spellLevels.map(function (l) {
       var used = [];
       for (var i = 0; i < l.max; i++) used.push(false);

@@ -308,7 +308,7 @@
     return {
       characterName: 'Mon Personnage',
       hp: { current: 10, max: 10, temp: 0 },
-      combatStats: { ac: 10, initiative: 0, speed: 9 },
+      combatStats: { ac: 10, initiative: 0, speed: 9, spellSaveDc: 10, spellAttackBonus: 0, hitDice: '' },
       spellLevels: makeSpellLevels(),
       classResources: [],
       attacks: [],
@@ -344,10 +344,13 @@
         l.used = resizeUsedArray(l.used, l.max);
       });
     }
-    if (!p.combatStats || typeof p.combatStats !== 'object') p.combatStats = { ac: 10, initiative: 0, speed: 9 };
+    if (!p.combatStats || typeof p.combatStats !== 'object') p.combatStats = { ac: 10, initiative: 0, speed: 9, spellSaveDc: 10, spellAttackBonus: 0, hitDice: '' };
     if (typeof p.combatStats.ac !== 'number' || isNaN(p.combatStats.ac)) p.combatStats.ac = 10;
     if (typeof p.combatStats.initiative !== 'number' || isNaN(p.combatStats.initiative)) p.combatStats.initiative = 0;
     if (typeof p.combatStats.speed !== 'number' || isNaN(p.combatStats.speed)) p.combatStats.speed = 9;
+    if (typeof p.combatStats.spellSaveDc !== 'number' || isNaN(p.combatStats.spellSaveDc)) p.combatStats.spellSaveDc = 10;
+    if (typeof p.combatStats.spellAttackBonus !== 'number' || isNaN(p.combatStats.spellAttackBonus)) p.combatStats.spellAttackBonus = 0;
+    if (typeof p.combatStats.hitDice !== 'string') p.combatStats.hitDice = '';
     if (!p.abilityScores || typeof p.abilityScores !== 'object') p.abilityScores = makeAbilityScores();
     ABILITY_KEYS.forEach(function (k) {
       if (typeof p.abilityScores[k] !== 'number' || isNaN(p.abilityScores[k])) p.abilityScores[k] = 0;
@@ -1268,7 +1271,10 @@
     var combatStatsHtml = [
       { key: 'ac', label: 'CA', display: p.combatStats.ac, inputValue: p.combatStats.ac, inputMode: 'numeric', pattern: '[0-9]*' },
       { key: 'initiative', label: 'Initiative', display: formatSigned(p.combatStats.initiative), inputValue: formatSigned(p.combatStats.initiative), inputMode: 'text', pattern: '-?[0-9]*' },
-      { key: 'speed', label: 'Déplacement', display: p.combatStats.speed + 'm', inputValue: p.combatStats.speed, inputMode: 'numeric', pattern: '[0-9]*' }
+      { key: 'speed', label: 'Déplacement', display: p.combatStats.speed + 'm', inputValue: p.combatStats.speed, inputMode: 'numeric', pattern: '[0-9]*' },
+      { key: 'spellSaveDc', label: 'DD Sauv', display: p.combatStats.spellSaveDc, inputValue: p.combatStats.spellSaveDc, inputMode: 'numeric', pattern: '[0-9]*' },
+      { key: 'spellAttackBonus', label: 'Sorts', display: formatSigned(p.combatStats.spellAttackBonus), inputValue: formatSigned(p.combatStats.spellAttackBonus), inputMode: 'text', pattern: '-?[0-9]*' },
+      { key: 'hitDice', label: 'Dés de vie', display: escapeHtml(p.combatStats.hitDice) || '—', inputValue: escapeHtml(p.combatStats.hitDice), inputMode: 'text', pattern: '.*' }
     ].map(function (stat) {
       var valueHtml = ui.editingCombatStat === stat.key
         ? '<input id="combatStatInput" data-key="' + stat.key + '" type="text" inputmode="' + stat.inputMode + '" pattern="' + stat.pattern + '" value="' + stat.inputValue + '" style="width:100%;font-size:17px;font-weight:700;color:var(--text-gold);background:transparent;border:none;border-bottom:1px solid var(--text-gold);outline:none;padding:0;text-align:center;box-sizing:border-box" class="font-cinzel"/>'
@@ -1739,6 +1745,18 @@
               '<label style="font-size:11px;color:var(--text-muted);text-align:center">Déplacement (m)</label>' +
               '<input type="text" inputmode="numeric" pattern="[0-9]*" data-action="combat-input" data-key="speed" value="' + p.combatStats.speed + '" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;text-align:center;box-sizing:border-box"/>' +
             '</div>' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+              '<label style="font-size:11px;color:var(--text-muted);text-align:center">DD Sauv</label>' +
+              '<input type="text" inputmode="numeric" pattern="[0-9]*" data-action="combat-input" data-key="spellSaveDc" value="' + p.combatStats.spellSaveDc + '" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;text-align:center;box-sizing:border-box"/>' +
+            '</div>' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+              '<label style="font-size:11px;color:var(--text-muted);text-align:center">Bonus aux sorts</label>' +
+              '<input type="text" inputmode="text" pattern="-?[0-9]*" data-action="combat-input" data-key="spellAttackBonus" value="' + formatSigned(p.combatStats.spellAttackBonus) + '" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;text-align:center;box-sizing:border-box"/>' +
+            '</div>' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+              '<label style="font-size:11px;color:var(--text-muted);text-align:center">Dés de vie</label>' +
+              '<input type="text" data-action="combat-input" data-key="hitDice" value="' + escapeHtml(p.combatStats.hitDice) + '" placeholder="5d8" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;text-align:center;box-sizing:border-box"/>' +
+            '</div>' +
           '</div>' +
         '</div>';
 
@@ -2146,8 +2164,12 @@
       combatStatInput.addEventListener('blur', function () {
         var key = combatStatInput.getAttribute('data-key');
         var stats = profile().combatStats;
-        var min = key === 'initiative' ? -99 : 0;
-        stats[key] = clamp(toInt(combatStatInput.value, stats[key]), min, 99);
+        if (key === 'hitDice') {
+          stats.hitDice = combatStatInput.value;
+        } else {
+          var min = (key === 'initiative' || key === 'spellAttackBonus') ? -99 : 0;
+          stats[key] = clamp(toInt(combatStatInput.value, stats[key]), min, 99);
+        }
         ui.editingCombatStat = null;
         saveState();
         render();
@@ -2328,8 +2350,12 @@
       el.addEventListener('change', function () {
         var key = el.getAttribute('data-key');
         var stats = settingsCharacterProfile().combatStats;
-        var min = key === 'initiative' ? -99 : 0;
-        stats[key] = clamp(toInt(el.value, stats[key]), min, 99);
+        if (key === 'hitDice') {
+          stats.hitDice = el.value;
+        } else {
+          var min = (key === 'initiative' || key === 'spellAttackBonus') ? -99 : 0;
+          stats[key] = clamp(toInt(el.value, stats[key]), min, 99);
+        }
         render();
       });
     });
