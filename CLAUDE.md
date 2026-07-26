@@ -169,6 +169,21 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    filtres actifs se combinent en OR (`spellMatchesGrimoireFilters()`) ; aucun filtre actif =
    tout afficher. L'état (`ui.grimoireFilters`, éphémère) est conservé en changeant d'onglet de
    niveau puisqu'il n'est jamais réinitialisé par `renderGrimoire()`/`grimoireStep()`.
+   **Popup de détail d'un sort** (juillet 2026, tous grimoires, hors mode Préparation) : tap sur
+   une ligne de sort (`data-action="open-spell-detail"`) pour ouvrir une popup plein contenu (nom
+   complet, niveau, type, portée, description et note, sans troncature ni ellipsis — utile car le
+   nom du sort dans la ligne est tronqué en ellipsis CSS s'il est trop long). `findSpellDetail()`
+   recherche le sort par nom dans tout `characterGrimoire(state.activeCharacterId)` (toutes
+   sections confondues) plutôt que de sérialiser ses infos dans des attributs `data-*`. Même
+   principe d'animation enter/leave que le portrait agrandi du Codex
+   (`ui.spellDetail = { spell, levelTag, leaving }` / `ui.spellDetailEnterPending`, classes CSS
+   `spell-detail-backdrop/card-enter/leave`, `startLeavingSpellDetail()` avec un `setTimeout` dont
+   la durée matche l'animation de sortie avant de vider l'état). Fermeture au tap sur le fond ou
+   sur la croix (les deux déclenchent `close-spell-detail` puisque tout le contenu de la popup
+   bubble jusqu'au fond, aucun `stopPropagation` — même comportement que la prévisualisation du
+   Codex). En mode Préparation (`renderGrimoireSection(section, spells, true)`), le tap sur une
+   ligne continue de (dé)préparer le sort comme avant (`data-action="toggle-prepared-spell"`) : la
+   popup ne s'y ouvre pas, pour ne pas entrer en conflit avec cette interaction existante.
 
    **Préparation de sorts (Deneor uniquement)** — contrairement à Calix, le Grimoire de Deneor
    n'affiche pas tout `DENEOR_SPELLBOOK` en lecture seule : dans `renderGrimoire()`, les sections
