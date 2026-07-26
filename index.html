@@ -226,6 +226,45 @@
   .codex-preview-card { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: min(92vw, 380px); }
   .codex-preview-card-enter { animation: codex-preview-card-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1.15); }
   .codex-preview-card-leave { animation: codex-preview-card-out 200ms ease-in forwards; }
+  @keyframes spell-detail-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes spell-detail-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes spell-detail-card-in {
+    from { transform: scale(0.9) translateY(12px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  @keyframes spell-detail-card-out {
+    from { transform: scale(1) translateY(0); opacity: 1; }
+    to { transform: scale(0.9) translateY(12px); opacity: 0; }
+  }
+  .spell-detail-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .spell-detail-backdrop-enter { animation: spell-detail-backdrop-in 200ms ease-out; }
+  .spell-detail-backdrop-leave { animation: spell-detail-backdrop-out 200ms ease-in forwards; }
+  .spell-detail-card {
+    width: 100%;
+    max-width: 360px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: var(--bg-card);
+    border: 1px solid rgba(var(--border-tint), 0.3);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+  }
+  .spell-detail-card-enter { animation: spell-detail-card-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1.15); }
+  .spell-detail-card-leave { animation: spell-detail-card-out 200ms ease-in forwards; }
   @keyframes grimoire-slide-next {
     from { opacity: 0; transform: translateX(28px); }
     to { opacity: 1; transform: translateX(0); }
@@ -769,7 +808,9 @@
     driveConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Drive est ouverte
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
-    codexPreviewEnterPending: false // true juste après déclenchement ; consommé une fois par render()
+    codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
+    spellDetail: null, // null | { spell, levelTag, leaving: bool } — popup d'infos complètes au tap sur un sort du Grimoire (pas en mode Préparation, où le tap sert à (dé)préparer)
+    spellDetailEnterPending: false // true juste après déclenchement ; consommé une fois par render()
   };
 
   function profile() { return state.profiles[state.activeProfileIndex]; }
@@ -994,6 +1035,20 @@
     return characterGrimoire(state.activeCharacterId);
   }
 
+  // Cherche un sort par nom dans tout le grimoire d'un personnage (toutes sections confondues),
+  // pour la popup de détail (renderSpellDetailModal()) — les noms de sorts sont uniques au sein
+  // d'un même grimoire.
+  function findSpellDetail(charId, name) {
+    var sections = characterGrimoire(charId).sections;
+    for (var i = 0; i < sections.length; i++) {
+      var spells = sections[i].spells;
+      for (var j = 0; j < spells.length; j++) {
+        if (spells[j].name === name) return { spell: spells[j], levelTag: sections[i].levelTag };
+      }
+    }
+    return null;
+  }
+
   // Noms des sorts réellement préparables (hors sorts de serment "alwaysAvailable" et hors
   // capacités de la section "classe", jamais préparables). Sert à assainir `preparedSpells` :
   // un nom qui n'y figure plus (sort de serment, sort renommé/retiré du grimoire...) ne pourra
@@ -1154,6 +1209,9 @@
     }
     if (ui.codexPreview) {
       app.insertAdjacentHTML('beforeend', renderCodexPreviewModal());
+    }
+    if (ui.spellDetail) {
+      app.insertAdjacentHTML('beforeend', renderSpellDetailModal());
     }
     var nextScroller = app.querySelector('[data-scroll-root]');
     if (nextScroller) nextScroller.scrollTop = scrollTop;
@@ -1450,9 +1508,13 @@
   function renderGrimoireSection(section, spells, prepareMode) {
     var rowsHtml = spells.map(function (spell, i) {
       var prepared = !!prepareMode && ui.draftPreparedSpells.indexOf(spell.name) !== -1;
-      var clickable = !!prepareMode;
-      return '<div ' + (clickable ? 'data-action="toggle-prepared-spell" data-name="' + escapeHtml(spell.name) + '"' : '') +
-        ' style="padding:11px 14px;background:' + (prepared ? 'rgba(34,197,94,0.14)' : (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)')) + ';border-bottom:1px solid rgba(var(--border-tint),0.14);' + (clickable ? 'cursor:pointer;' : '') + (prepared ? 'border-left:3px solid #22c55e;' : '') + '">' +
+      // En mode Préparation, le tap (dé)prépare le sort ; sinon (Grimoire normal), il ouvre la
+      // popup de détail (renderSpellDetailModal()) pour lire le nom/la description sans troncature.
+      var rowAction = prepareMode
+        ? 'data-action="toggle-prepared-spell" data-name="' + escapeHtml(spell.name) + '"'
+        : 'data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '"';
+      return '<div ' + rowAction +
+        ' style="padding:11px 14px;background:' + (prepared ? 'rgba(34,197,94,0.14)' : (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)')) + ';border-bottom:1px solid rgba(var(--border-tint),0.14);cursor:pointer;' + (prepared ? 'border-left:3px solid #22c55e;' : '') + '">' +
         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
           '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
             (prepared ? '<div style="flex:none;width:16px;height:16px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center">' + ICON_CHECK + '</div>' : '') +
@@ -1474,6 +1536,36 @@
     return '<div style="display:flex;flex-direction:column;gap:6px">' +
       '<div style="font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">' + escapeHtml(section.title) + '</div>' +
       '<div style="display:flex;flex-direction:column;border-radius:12px;overflow:hidden;border:1px solid rgba(var(--border-tint),0.2)">' + rowsHtml + '</div>' +
+    '</div>';
+  }
+
+  // Popup de détail d'un sort (tap sur une ligne du Grimoire hors mode Préparation) — même
+  // principe enter/leave animé que le portrait agrandi du Codex (ui.spellDetail.leaving +
+  // render() immédiat, puis un setTimeout dont la durée matche l'animation CSS de sortie avant de
+  // vider l'état pour de bon). Reprend les mêmes informations que la ligne (nom, niveau, type,
+  // portée, description, note) mais sans troncature.
+  function renderSpellDetailModal() {
+    var entering = ui.spellDetailEnterPending;
+    ui.spellDetailEnterPending = false;
+    var leaving = ui.spellDetail.leaving;
+    var backdropAnim = leaving ? 'spell-detail-backdrop-leave' : (entering ? 'spell-detail-backdrop-enter' : '');
+    var cardAnim = leaving ? 'spell-detail-card-leave' : (entering ? 'spell-detail-card-enter' : '');
+    var spell = ui.spellDetail.spell;
+    var levelTag = ui.spellDetail.levelTag;
+    return '<div class="spell-detail-backdrop ' + backdropAnim + '" data-action="close-spell-detail">' +
+      '<div class="spell-detail-card ' + cardAnim + '">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
+          '<div style="font-size:18px;font-weight:700;color:var(--text-main);font-family:\'Cinzel\',serif;line-height:1.25">' + escapeHtml(spell.name) + '</div>' +
+          '<div data-action="close-spell-detail" style="flex:none;width:32px;height:32px;border-radius:16px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.3);display:flex;align-items:center;justify-content:center;color:var(--text-main);cursor:pointer">' + iconClose() + '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+          '<div style="background:rgba(var(--border-tint),0.12);border:1px solid rgba(var(--border-tint),0.32);color:var(--text-chip);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700">' + escapeHtml(levelTag) + '</div>' +
+          '<div style="' + spellBadgeStyle(spell.type) + 'padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:0.03em">' + escapeHtml(spell.type) + '</div>' +
+        '</div>' +
+        '<div style="font-size:12.5px;color:var(--text-muted)">' + escapeHtml(spell.range) + '</div>' +
+        '<div style="font-size:14px;color:var(--text-desc);line-height:1.5">' + escapeHtml(spell.desc) + '</div>' +
+        (spell.note ? '<div style="font-size:12.5px;color:var(--text-note);font-style:italic;line-height:1.4;border-top:1px solid rgba(var(--border-tint),0.16);padding-top:10px">' + escapeHtml(spell.note) + '</div>' : '') +
+      '</div>' +
     '</div>';
   }
 
@@ -2773,6 +2865,19 @@
       case 'close-codex-preview':
         startLeavingCodexPreview();
         break;
+      case 'open-spell-detail': {
+        var spellDetailName = e.currentTarget.getAttribute('data-name');
+        var foundSpellDetail = findSpellDetail(state.activeCharacterId, spellDetailName);
+        if (foundSpellDetail) {
+          ui.spellDetail = { spell: foundSpellDetail.spell, levelTag: foundSpellDetail.levelTag, leaving: false };
+          ui.spellDetailEnterPending = true;
+          render();
+        }
+        break;
+      }
+      case 'close-spell-detail':
+        startLeavingSpellDetail();
+        break;
       case 'gold-adjust': {
         var goldDelta = parseInt(e.currentTarget.getAttribute('data-delta'), 10);
         ui.goldModalDraft = clamp(ui.goldModalDraft + goldDelta, 0, 10000);
@@ -2973,6 +3078,21 @@
       ui.codexPreview = null;
       render();
     }, CODEX_PREVIEW_LEAVE_MS);
+  }
+
+  // ---- popup de détail d'un sort du Grimoire ----
+  var SPELL_DETAIL_LEAVE_MS = 200; // doit matcher la durée de spell-detail-card-out
+  var spellDetailRemoveTimer = null;
+
+  function startLeavingSpellDetail() {
+    if (!ui.spellDetail || ui.spellDetail.leaving) return;
+    ui.spellDetail.leaving = true;
+    render();
+    clearTimeout(spellDetailRemoveTimer);
+    spellDetailRemoveTimer = setTimeout(function () {
+      ui.spellDetail = null;
+      render();
+    }, SPELL_DETAIL_LEAVE_MS);
   }
 
   // ---- actions Charger/Sauvegarder (Google Drive), déclenchées après confirmation ----
