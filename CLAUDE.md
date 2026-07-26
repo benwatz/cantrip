@@ -137,42 +137,45 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    section 7.3 pour la spec d'origine.
    **Grimoire de Deneor (Paladin, Serment des Anciens)** : système de préparation de sorts
    quotidienne, voir sous-section dédiée plus bas.
-   Pagination par onglets sous le titre "Grimoire" : un onglet par niveau de sort de 0 à
+   Onglets niveau/Classe sous le titre "Grimoire" : un onglet par niveau de sort de 0 à
    `maxEnabledSpellLevel()` (le plus haut niveau d'emplacement activé dans Paramètres) — l'onglet
    0 est omis si le grimoire actif (`activeSpellbook()`) n'a aucun sort de niveau 0 (cas de Deneor,
    qui n'a pas de sorts mineurs de Paladin) —, plus un onglet "Classe" en dernière position pour la
-   section "Capacités de classe et dons" (non liée à un niveau). Navigation par tap sur un onglet
-   (`data-action="grimoire-tab"`) ou par swipe
-   horizontal sur la zone de contenu (`#grimoireSwipe`, listeners `touchstart`/`touchend` dans
-   `bindEvents()`) : swipe vers la gauche = niveau suivant, swipe vers la droite = niveau
-   précédent, sans effet de bord aux extrémités (`grimoireStep()`). Le swipe (mais pas le tap sur
-   un onglet) déclenche une animation de glissement directionnelle sur `#grimoireSwipe`
-   (`ui.grimoireAnimDirection`, classes CSS `grimoire-anim-next`/`-prev`, consommée une seule
-   fois par `renderGrimoire()` pour ne pas se rejouer aux re-renders suivants). L'onglet actif
-   (`ui.grimoireTab`, état éphémère, vaut `0` par défaut en début de session) est recalé sur
-   `tabs[0]` (premier onglet réellement disponible, **pas** un `0` en dur) si le niveau affiché
+   section "Capacités de classe et dons" (non liée à un niveau). Sur l'écran Grimoire
+   (`renderGrimoire()`, pas `renderGrimoirePrepare()`), ces onglets sont **cumulables** (juillet
+   2026) : chacun se toggle indépendamment au clic (`data-action="toggle-grimoire-level"`,
+   `ui.grimoireActiveLevels`, objet éphémère `{ [niveau|'classe']: boolean }`,
+   `grimoireLevelIsActive()`/`grimoireLevelsToShow()`/`grimoireLevelChipsHtml()`), et le contenu
+   affiché est l'union des niveaux actifs (`levelsToShow`) ; aucun onglet actif = tout afficher,
+   même convention que les filtres de type ci-dessous. Le swipe horizontal historique
+   (`#grimoireSwipe`, `grimoireStep()`, `ui.grimoireAnimDirection`/classes
+   `grimoire-anim-next`/`-prev`) n'existe donc plus que sur `renderGrimoirePrepare()`, seule page
+   restée en single-select ; le listener `touchstart`/`touchend` dans `bindEvents()` est gated sur
+   `ui.view === 'grimoire-prepare'` pour ne plus s'attacher sur l'écran Grimoire. `ui.grimoireTab`
+   (état éphémère, `0` par défaut) reste utilisé uniquement par `renderGrimoirePrepare()`, recalé
+   sur `tabs[0]` (premier onglet réellement disponible, **pas** un `0` en dur) si le niveau affiché
    n'existe plus parmi les onglets courants — que ce soit après un changement de config dans
-   Paramètres (ex. désactivation du niveau en cours de visionnage) ou simplement parce que `0`
-   n'est jamais un onglet valide chez Deneor (pas de sorts de niveau 0) : sans ce recalage sur
-   `tabs[0]`, le Grimoire de Deneor s'ouvrait sur un onglet invalide au premier chargement de
-   session et affichait "Aucun sort à ce niveau" malgré des sorts existants (bug corrigé
-   2026-07-13). Même logique dans `renderGrimoirePrepare()`.
+   Paramètres ou simplement parce que `0` n'est jamais un onglet valide chez Deneor (pas de sorts
+   de niveau 0) : sans ce recalage sur `tabs[0]`, le Grimoire de Deneor s'ouvrait sur un onglet
+   invalide au premier chargement de session et affichait "Aucun sort à ce niveau" malgré des
+   sorts existants (bug corrigé 2026-07-13).
    Filtres par type sur la même ligne que le titre "Grimoire", alignés à droite : Action / Bonus
    / Réaction (`GRIMOIRE_FILTERS`, chips `data-action="toggle-grimoire-filter"`). Plusieurs
    filtres actifs se combinent en OR (`spellMatchesGrimoireFilters()`) ; aucun filtre actif =
-   tout afficher. L'état (`ui.grimoireFilters`, éphémère) est conservé en changeant d'onglet de
-   niveau puisqu'il n'est jamais réinitialisé par `renderGrimoire()`/`grimoireStep()`.
+   tout afficher. L'état (`ui.grimoireFilters`, éphémère) est conservé en changeant la sélection de
+   niveaux puisqu'il n'est jamais réinitialisé par `renderGrimoire()`.
    Pour Deneor uniquement, un chip "Non préparé" (`GRIMOIRE_NOT_PREPARED_FILTER`, juillet 2026)
    s'ajoute **dans la rangée des onglets de niveau** (`hscroll` sous le titre, après "Classe"),
    pas dans la ligne de filtres de type Action/Bonus/Réaction — cliquable/cumulable au même titre
-   que les autres (même `data-action="toggle-grimoire-filter"`/`ui.grimoireFilters`), mais ce
-   n'est pas un filtre de type : il n'a pas de `prefix` et est donc ignoré par
-   `spellMatchesGrimoireFilters()`. Il agit en amont, dans `renderGrimoire()`, sur le masquage par
-   défaut des sorts non préparés (voir paragraphe suivant) : inactif, la liste ne montre que les
-   sorts préparés/`alwaysAvailable` comme avant ; actif, elle bascule sur les sorts **non**
-   préparés (plutôt que d'ajouter les deux ensembles), pour repérer ce qui manque encore niveau
-   par niveau. Les filtres de type (Action/Bonus/Réaction) continuent de s'appliquer par-dessus,
-   quel que soit l'état de ce chip.
+   que les onglets de niveau et les filtres de type (même gabarit de chip que les onglets, mais
+   son propre `data-action="toggle-grimoire-filter"`/`ui.grimoireFilters`, car il ne concerne pas
+   une sélection de niveaux mais un statut de préparation). Ce n'est pas un filtre de type : il n'a
+   pas de `prefix` et est donc ignoré par `spellMatchesGrimoireFilters()`. Il agit en amont, dans
+   `renderGrimoire()`, sur le masquage par défaut des sorts non préparés : inactif, la liste ne
+   montre que les sorts préparés/`alwaysAvailable` comme avant ; actif, elle bascule sur les sorts
+   **non** préparés (plutôt que d'ajouter les deux ensembles), pour repérer ce qui manque encore
+   parmi les niveaux sélectionnés. Les filtres de type (Action/Bonus/Réaction) continuent de
+   s'appliquer par-dessus, quel que soit l'état de ce chip.
 
    **Préparation de sorts (Deneor uniquement)** — contrairement à Calix, le Grimoire de Deneor
    n'affiche pas tout `DENEOR_SPELLBOOK` en lecture seule : dans `renderGrimoire()`, les sections
