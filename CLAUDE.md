@@ -162,15 +162,17 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    filtres actifs se combinent en OR (`spellMatchesGrimoireFilters()`) ; aucun filtre actif =
    tout afficher. L'état (`ui.grimoireFilters`, éphémère) est conservé en changeant d'onglet de
    niveau puisqu'il n'est jamais réinitialisé par `renderGrimoire()`/`grimoireStep()`.
-   Pour Deneor uniquement, un 4e chip "Non préparé" (`GRIMOIRE_NOT_PREPARED_FILTER`, juillet 2026)
-   s'ajoute après Réaction — cliquable/cumulable au même titre que les autres (même
-   `data-action`/`ui.grimoireFilters`), mais ce n'est pas un filtre de type : il n'a pas de
-   `prefix` et est donc ignoré par `spellMatchesGrimoireFilters()`. Il agit en amont, dans
-   `renderGrimoire()`, sur le masquage par défaut des sorts non préparés (voir paragraphe
-   suivant) : inactif, la liste ne montre que les sorts préparés/`alwaysAvailable` comme avant ;
-   actif, elle bascule sur les sorts **non** préparés (plutôt que d'ajouter les deux ensembles),
-   pour repérer ce qui manque encore niveau par niveau. Les filtres de type (Action/Bonus/Réaction)
-   continuent de s'appliquer par-dessus, quel que soit l'état de ce chip.
+   Pour Deneor uniquement, un chip "Non préparé" (`GRIMOIRE_NOT_PREPARED_FILTER`, juillet 2026)
+   s'ajoute **dans la rangée des onglets de niveau** (`hscroll` sous le titre, après "Classe"),
+   pas dans la ligne de filtres de type Action/Bonus/Réaction — cliquable/cumulable au même titre
+   que les autres (même `data-action="toggle-grimoire-filter"`/`ui.grimoireFilters`), mais ce
+   n'est pas un filtre de type : il n'a pas de `prefix` et est donc ignoré par
+   `spellMatchesGrimoireFilters()`. Il agit en amont, dans `renderGrimoire()`, sur le masquage par
+   défaut des sorts non préparés (voir paragraphe suivant) : inactif, la liste ne montre que les
+   sorts préparés/`alwaysAvailable` comme avant ; actif, elle bascule sur les sorts **non**
+   préparés (plutôt que d'ajouter les deux ensembles), pour repérer ce qui manque encore niveau
+   par niveau. Les filtres de type (Action/Bonus/Réaction) continuent de s'appliquer par-dessus,
+   quel que soit l'état de ce chip.
 
    **Préparation de sorts (Deneor uniquement)** — contrairement à Calix, le Grimoire de Deneor
    n'affiche pas tout `DENEOR_SPELLBOOK` en lecture seule : dans `renderGrimoire()`, les sections
