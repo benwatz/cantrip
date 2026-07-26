@@ -188,10 +188,13 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    paramètre optionnel calculé dans `renderGrimoirePrepare()` uniquement) pour repérer d'un coup
    d'oeil où se trouvent les sorts comptés dans le badge. Filtres dédiés `PREPARE_FILTERS` (état
    `ui.prepareFilters`, éphémère) : Action / Bonus (pas de Réaction — aucun sort de ce type chez
-   Deneor — ni de Classe), plus un filtre "Préparé" qui ne teste pas le type du sort mais sa
-   présence dans `ui.draftPreparedSpells` (traité à part de la correspondance par préfixe de type
-   dans `spellMatchesPrepareTypeFilters()`) ; combiné en OR avec Action/Bonus comme les autres
-   filtres du Grimoire.
+   Deneor — ni de Classe), plus deux filtres "Préparé"/"Non préparé" (juillet 2026) qui ne testent
+   pas le type du sort mais sa présence (ou absence) dans `ui.draftPreparedSpells` (traités à part
+   de la correspondance par préfixe de type dans `spellMatchesPrepareTypeFilters()`) ; comme les
+   autres filtres du Grimoire, chaque chip togglé indépendamment au clic
+   (`data-action="toggle-prepare-filter"`) et combiné en OR avec les autres filtres actifs — activer
+   à la fois "Préparé" et "Non préparé" affiche donc tous les sorts (union des deux), pas
+   l'intersection vide.
    **Brouillon non destructif** : les sélections ne modifient pas directement
    `profile().preparedSpells` mais une copie de travail éphémère `ui.draftPreparedSpells`
    (initialisée à l'entrée sur la page, dans les trois points d'entrée ci-dessous). La flèche

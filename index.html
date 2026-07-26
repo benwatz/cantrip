@@ -745,7 +745,7 @@
     grimoireTab: 0, // niveau numérique (0..9) ou 'classe'
     grimoireAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderGrimoire()/renderGrimoirePrepare()
     grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les onglets de niveau
-    prepareFilters: { action: false, bonus: false, prepared: false }, // filtres propres à la page "Préparation de sorts" (Deneor)
+    prepareFilters: { action: false, bonus: false, prepared: false, notPrepared: false }, // filtres propres à la page "Préparation de sorts" (Deneor)
     grimoirePrepareBackView: 'grimoire', // vue vers laquelle revenir depuis "Préparation de sorts"
     draftPreparedSpells: [], // copie de travail de profile().preparedSpells pendant "grimoire-prepare" ; seul "Valider" la répercute
     settingsLevelError: '',
@@ -1417,12 +1417,15 @@
 
   // Filtres de la page "Préparation de sorts" (Deneor) : pas de Réaction (aucun sort de ce type
   // dans sa liste) ni de Classe (les capacités de classe/serment ne sont pas préparables, elles
-  // n'apparaissent que dans le Grimoire normal). "Préparé" est un filtre à part : il ne teste pas
-  // le type du sort mais sa présence dans le brouillon en cours (ui.draftPreparedSpells).
+  // n'apparaissent que dans le Grimoire normal). "Préparé"/"Non préparé" sont des filtres à part :
+  // ils ne testent pas le type du sort mais sa présence (ou non) dans le brouillon en cours
+  // (ui.draftPreparedSpells). Comme les autres, ils sont cumulables et se togglent au clic
+  // (data-action="toggle-prepare-filter"), combinés en OR avec le reste.
   var PREPARE_FILTERS = [
     { key: 'action', label: 'Action', prefix: 'ACTION', style: SPELL_TYPE_STYLES.ACTION },
     { key: 'bonus', label: 'Bonus', prefix: 'BONUS', style: SPELL_TYPE_STYLES.BONUS },
-    { key: 'prepared', label: 'Préparé', style: 'background:rgba(34,197,94,0.28);border:1px solid #22c55e;color:var(--accent-green-text);' }
+    { key: 'prepared', label: 'Préparé', style: 'background:rgba(34,197,94,0.28);border:1px solid #22c55e;color:var(--accent-green-text);' },
+    { key: 'notPrepared', label: 'Non préparé', style: 'background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.6);color:var(--accent-red-text);' }
   ];
 
   function spellMatchesPrepareTypeFilters(spell) {
@@ -1431,6 +1434,7 @@
     var t = spell.type.toUpperCase();
     return activeFilters.some(function (f) {
       if (f.key === 'prepared') return ui.draftPreparedSpells.indexOf(spell.name) !== -1;
+      if (f.key === 'notPrepared') return ui.draftPreparedSpells.indexOf(spell.name) === -1;
       return t.indexOf(f.prefix) === 0;
     });
   }
