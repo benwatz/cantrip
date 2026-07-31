@@ -89,6 +89,19 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    `damageBonus` s'il est non nul) et le type (`damageType`), séparés par un point médian,
    tronqués en ellipsis CSS si trop longs plutôt que d'être abrégés en JS. Uniquement des armes :
    pas de notion de sort dans ce bloc (choix explicite — voir Décisions de conception).
+   **Rangées de badges** (emplacements de sorts par niveau, ressources de classe de type
+   `badges`) : chaque rangée est encadrée par un bouton `−` à gauche et `+` à droite (juillet
+   2026, même gabarit que les boutons −/+ des compétences dans Paramétrer le Personnage — 36×36,
+   `border-radius:8px`, rouge/vert), en `flex:none` de part et d'autre d'un conteneur `.hscroll`
+   centré (`justify-content:center`, `flex:1`) qui contient les badges. Les deux boutons sont donc
+   toujours à la même position horizontale (bord de la carte) quel que soit le nombre de badges ou
+   la largeur du libellé de niveau/ressource au-dessus. `−` (`data-action="spell-slot-dec"` /
+   `"class-badge-dec"`) consomme le premier badge encore disponible (`used.indexOf(false)`) ; `+`
+   (`data-action="spell-slot-inc"` / `"class-badge-inc"`) restaure le dernier badge utilisé
+   (`used.lastIndexOf(true)`) ; sans effet si tous les badges sont déjà dans l'état ciblé. Le tap
+   direct sur un badge (`data-action="toggle-spell"`/`"toggle-class"`) continue de fonctionner en
+   parallèle pour (dé)cocher un emplacement précis. Les ressources de type `counter` ne sont pas
+   concernées (leurs boutons −/+ existants, `counter-dec`/`counter-inc`, jouent déjà ce rôle).
    Deux marqueurs toggle (`profile.concentration`, `profile.inspiration`, booléens indépendants)
    alignés à droite sur la ligne du nom du personnage, dans l'ordre inspiration puis
    concentration : point d'inspiration (icône étoile
