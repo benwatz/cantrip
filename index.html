@@ -265,16 +265,6 @@
   }
   .spell-detail-card-enter { animation: spell-detail-card-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1.15); }
   .spell-detail-card-leave { animation: spell-detail-card-out 200ms ease-in forwards; }
-  @keyframes grimoire-slide-next {
-    from { opacity: 0; transform: translateX(28px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-  @keyframes grimoire-slide-prev {
-    from { opacity: 0; transform: translateX(-28px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-  .grimoire-anim-next { animation: grimoire-slide-next 420ms ease-out; }
-  .grimoire-anim-prev { animation: grimoire-slide-prev 420ms ease-out; }
   @keyframes character-slide-next {
     from { opacity: 0; transform: translateX(60px); }
     to { opacity: 1; transform: translateX(0); }
@@ -784,9 +774,8 @@
     shortRestChecks: { hp: false, spells: false, tempHp: false, classResource: false, counters: false },
     statsSearch: '',
     codexSearch: '',
-    grimoireTab: 0, // niveau numérique (0..9) ou 'classe'
-    grimoireAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderGrimoire()/renderGrimoirePrepare()
-    grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les onglets de niveau
+    grimoireLevelFilters: null, // { [niveau numérique (0..9) | 'classe']: bool } ; null = pas encore initialisé (équivaut à "tous actifs")
+    grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les filtres de niveau
     prepareFilters: { action: false, bonus: false, prepared: false, notPrepared: false }, // filtres propres à la page "Préparation de sorts" (Deneor)
     grimoirePrepareBackView: 'grimoire', // vue vers laquelle revenir depuis "Préparation de sorts"
     draftPreparedSpells: [], // copie de travail de profile().preparedSpells pendant "grimoire-prepare" ; seul "Valider" la répercute
@@ -1468,6 +1457,16 @@
     return tab === 'classe' ? 'Classe' : String(tab);
   }
 
+  // Lazy-init : au premier rendu (ou dès qu'un nouveau niveau apparaît, ex. activation d'un
+  // niveau d'emplacement de sort dans Paramètres), tous les filtres de niveau démarrent actifs —
+  // équivalent visuel à "Tous" sélectionné, pour afficher le Grimoire au complet par défaut.
+  function ensureGrimoireLevelFilters(tabs) {
+    if (!ui.grimoireLevelFilters) ui.grimoireLevelFilters = {};
+    tabs.forEach(function (t) {
+      if (!(t in ui.grimoireLevelFilters)) ui.grimoireLevelFilters[t] = true;
+    });
+  }
+
   var GRIMOIRE_FILTERS = [
     { key: 'action', label: 'Action', prefix: 'ACTION', style: SPELL_TYPE_STYLES.ACTION },
     { key: 'bonus', label: 'Bonus', prefix: 'BONUS', style: SPELL_TYPE_STYLES.BONUS },
@@ -1569,11 +1568,22 @@
     '</div>';
   }
 
+  // Onglets de niveau devenus des filtres combinables (juillet 2026, remplace la sélection
+  // exclusive à un seul niveau) : chaque chip togglé indépendamment se combine en OR avec les
+  // autres (même principe que GRIMOIRE_FILTERS/PREPARE_FILTERS). "Tous" (data-action=
+  // "toggle-grimoire-level-all") n'est pas un niveau parmi d'autres mais un raccourci maître :
+  // actif seulement quand tous les niveaux le sont, il les active/désactive tous d'un coup.
   function grimoireTabsHtml(tabs, dotLevels) {
-    return tabs.map(function (tab) {
-      var active = tab === ui.grimoireTab;
+    var allActive = tabs.every(function (t) { return !!ui.grimoireLevelFilters[t]; });
+    var allChipHtml = '<div data-action="toggle-grimoire-level-all" style="flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+      (allActive
+        ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);'
+        : 'background:transparent;border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
+      '">Tous</div>';
+    var tabsHtml = tabs.map(function (tab) {
+      var active = !!ui.grimoireLevelFilters[tab];
       var hasPrepared = !!(dotLevels && dotLevels[tab]);
-      return '<div data-action="grimoire-tab" data-tab="' + tab + '" style="position:relative;flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+      return '<div data-action="toggle-grimoire-level" data-tab="' + tab + '" style="position:relative;flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
         (active
           ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);'
           : 'background:transparent;border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
@@ -1581,14 +1591,12 @@
         (hasPrepared ? '<div style="position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:#22c55e;border:1px solid var(--bg-card)"></div>' : '') +
         '</div>';
     }).join('');
+    return allChipHtml + tabsHtml;
   }
 
   function renderGrimoire() {
-    var animDirection = ui.grimoireAnimDirection;
-    ui.grimoireAnimDirection = null;
-
     var tabs = grimoireTabs();
-    if (tabs.indexOf(ui.grimoireTab) === -1) ui.grimoireTab = tabs[0];
+    ensureGrimoireLevelFilters(tabs);
 
     var tabsHtml = grimoireTabsHtml(tabs);
 
@@ -1600,7 +1608,8 @@
     }).join('');
 
     var isDeneor = state.activeCharacterId === 'deneor';
-    var matchingSections = activeSpellbook().sections.filter(function (s) { return s.level === ui.grimoireTab; });
+    var activeLevels = tabs.filter(function (t) { return ui.grimoireLevelFilters[t]; });
+    var matchingSections = activeSpellbook().sections.filter(function (s) { return ui.grimoireLevelFilters[s.level]; });
     var sectionsWithSpells = matchingSections.map(function (s) {
       var visibleSpells = (isDeneor && s.level !== 'classe')
         ? s.spells.filter(function (spell) { return spell.alwaysAvailable || profile().preparedSpells.indexOf(spell.name) !== -1; })
@@ -1610,7 +1619,9 @@
     var totalSpellsAtLevel = matchingSections.reduce(function (sum, s) { return sum + s.spells.length; }, 0);
 
     var contentHtml;
-    if (sectionsWithSpells.length) {
+    if (!activeLevels.length) {
+      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Sélectionnez au moins un niveau.</div>';
+    } else if (sectionsWithSpells.length) {
       contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSection(x.section, x.spells); }).join('<div style="height:14px"></div>');
     } else if (totalSpellsAtLevel === 0) {
       contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort à ce niveau.</div>';
@@ -1625,7 +1636,7 @@
           '<div style="display:flex;gap:6px">' + filterChipsHtml + '</div>' +
         '</div>' +
         '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
-        '<div id="grimoireSwipe" data-scroll-root class="' + (animDirection === 'next' ? 'grimoire-anim-next' : animDirection === 'prev' ? 'grimoire-anim-prev' : '') + '" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
+        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
         (isDeneor
           ? '<div id="grimoirePrepareFab" data-action="open-grimoire-prepare" data-back="grimoire" style="position:absolute;left:0;right:0;bottom:0;height:48px;border-radius:10px;background:var(--border-strong);color:var(--ink-bright);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);transition:opacity 200ms ease-out" class="font-cinzel">Préparer mes sorts</div>'
           : '') +
@@ -1634,11 +1645,8 @@
   }
 
   function renderGrimoirePrepare() {
-    var animDirection = ui.grimoireAnimDirection;
-    ui.grimoireAnimDirection = null;
-
     var tabs = grimoireTabs().filter(function (t) { return t !== 'classe'; });
-    if (tabs.indexOf(ui.grimoireTab) === -1) ui.grimoireTab = tabs[0];
+    ensureGrimoireLevelFilters(tabs);
     // Pastille verte sur les onglets contenant au moins un sort déjà préparé, pour repérer d'un
     // coup d'oeil où se trouvent les sorts comptés dans le badge (qui totalise tous les niveaux).
     var preparedLevels = {};
@@ -1657,7 +1665,8 @@
         '">' + escapeHtml(f.label) + '</div>';
     }).join('');
 
-    var matchingSections = characterGrimoire('deneor').sections.filter(function (s) { return s.level === ui.grimoireTab; });
+    var activeLevels = tabs.filter(function (t) { return ui.grimoireLevelFilters[t]; });
+    var matchingSections = characterGrimoire('deneor').sections.filter(function (s) { return s.level !== 'classe' && ui.grimoireLevelFilters[s.level]; });
     var preparableSections = matchingSections.map(function (s) {
       return { title: s.title, levelTag: s.levelTag, level: s.level, spells: s.spells.filter(function (spell) { return !spell.alwaysAvailable; }) };
     });
@@ -1667,7 +1676,9 @@
     var totalSpellsAtLevel = preparableSections.reduce(function (sum, s) { return sum + s.spells.length; }, 0);
 
     var contentHtml;
-    if (sectionsWithSpells.length) {
+    if (!activeLevels.length) {
+      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Sélectionnez au moins un niveau.</div>';
+    } else if (sectionsWithSpells.length) {
       contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSection(x.section, x.spells, true); }).join('<div style="height:14px"></div>');
     } else if (totalSpellsAtLevel === 0) {
       contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort à ce niveau.</div>';
@@ -1688,7 +1699,7 @@
         '</div>' +
         '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:none">' + filterChipsHtml + '</div>' +
         '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
-        '<div id="grimoireSwipe" data-scroll-root class="' + (animDirection === 'next' ? 'grimoire-anim-next' : animDirection === 'prev' ? 'grimoire-anim-prev' : '') + '" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:4px">' + contentHtml + '</div>' +
+        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:4px">' + contentHtml + '</div>' +
         '<div data-action="confirm-grimoire-prepare" style="flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Valider</div>' +
       '</div>'
     );
@@ -2473,24 +2484,6 @@
 
     var grimoireSwipe = document.getElementById('grimoireSwipe');
     if (grimoireSwipe) {
-      var touchStartX = 0, touchStartY = 0, touchActive = false;
-      grimoireSwipe.addEventListener('touchstart', function (e) {
-        if (e.touches.length !== 1) return;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchActive = true;
-      }, { passive: true });
-      grimoireSwipe.addEventListener('touchend', function (e) {
-        if (!touchActive) return;
-        touchActive = false;
-        var touch = e.changedTouches[0];
-        var dx = touch.clientX - touchStartX;
-        var dy = touch.clientY - touchStartY;
-        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-          grimoireStep(dx < 0 ? 1 : -1);
-        }
-      }, { passive: true });
-
       var grimoirePrepareFab = document.getElementById('grimoirePrepareFab');
       if (grimoirePrepareFab) {
         var updateFabVisibility = function () {
@@ -2565,17 +2558,6 @@
       characterCarouselSwipe.addEventListener('pointerup', endCharDrag);
       characterCarouselSwipe.addEventListener('pointercancel', endCharDrag);
     }
-  }
-
-  function grimoireStep(delta) {
-    var tabs = grimoireTabs();
-    var idx = tabs.indexOf(ui.grimoireTab);
-    if (idx === -1) idx = 0;
-    var newIdx = clamp(idx + delta, 0, tabs.length - 1);
-    if (newIdx === idx) return;
-    ui.grimoireAnimDirection = delta > 0 ? 'next' : 'prev';
-    ui.grimoireTab = tabs[newIdx];
-    render();
   }
 
   function characterCarouselStep(delta) {
@@ -2778,9 +2760,17 @@
         render();
         break;
       }
-      case 'grimoire-tab': {
+      case 'toggle-grimoire-level': {
         var tabValue = e.currentTarget.getAttribute('data-tab');
-        ui.grimoireTab = tabValue === 'classe' ? 'classe' : parseInt(tabValue, 10);
+        var levelKey = tabValue === 'classe' ? 'classe' : parseInt(tabValue, 10);
+        ui.grimoireLevelFilters[levelKey] = !ui.grimoireLevelFilters[levelKey];
+        render();
+        break;
+      }
+      case 'toggle-grimoire-level-all': {
+        var allTabs = ui.view === 'grimoire-prepare' ? grimoireTabs().filter(function (t) { return t !== 'classe'; }) : grimoireTabs();
+        var allActive = allTabs.every(function (t) { return !!ui.grimoireLevelFilters[t]; });
+        allTabs.forEach(function (t) { ui.grimoireLevelFilters[t] = !allActive; });
         render();
         break;
       }

@@ -144,31 +144,33 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    section 7.3 pour la spec d'origine.
    **Grimoire de Deneor (Paladin, Serment des Anciens)** : système de préparation de sorts
    quotidienne, voir sous-section dédiée plus bas.
-   Pagination par onglets sous le titre "Grimoire" : un onglet par niveau de sort de 0 à
+   Onglets de niveau sous le titre "Grimoire" : un onglet par niveau de sort de 0 à
    `maxEnabledSpellLevel()` (le plus haut niveau d'emplacement activé dans Paramètres) — l'onglet
    0 est omis si le grimoire actif (`activeSpellbook()`) n'a aucun sort de niveau 0 (cas de Deneor,
    qui n'a pas de sorts mineurs de Paladin) —, plus un onglet "Classe" en dernière position pour la
-   section "Capacités de classe et dons" (non liée à un niveau). Navigation par tap sur un onglet
-   (`data-action="grimoire-tab"`) ou par swipe
-   horizontal sur la zone de contenu (`#grimoireSwipe`, listeners `touchstart`/`touchend` dans
-   `bindEvents()`) : swipe vers la gauche = niveau suivant, swipe vers la droite = niveau
-   précédent, sans effet de bord aux extrémités (`grimoireStep()`). Le swipe (mais pas le tap sur
-   un onglet) déclenche une animation de glissement directionnelle sur `#grimoireSwipe`
-   (`ui.grimoireAnimDirection`, classes CSS `grimoire-anim-next`/`-prev`, consommée une seule
-   fois par `renderGrimoire()` pour ne pas se rejouer aux re-renders suivants). L'onglet actif
-   (`ui.grimoireTab`, état éphémère, vaut `0` par défaut en début de session) est recalé sur
-   `tabs[0]` (premier onglet réellement disponible, **pas** un `0` en dur) si le niveau affiché
-   n'existe plus parmi les onglets courants — que ce soit après un changement de config dans
-   Paramètres (ex. désactivation du niveau en cours de visionnage) ou simplement parce que `0`
-   n'est jamais un onglet valide chez Deneor (pas de sorts de niveau 0) : sans ce recalage sur
-   `tabs[0]`, le Grimoire de Deneor s'ouvrait sur un onglet invalide au premier chargement de
-   session et affichait "Aucun sort à ce niveau" malgré des sorts existants (bug corrigé
-   2026-07-13). Même logique dans `renderGrimoirePrepare()`.
+   section "Capacités de classe et dons" (non liée à un niveau). Depuis juillet 2026, ce ne sont
+   plus des onglets à sélection exclusive mais des **filtres combinables** (même principe que les
+   filtres par type ci-dessous) : chaque niveau togglé indépendamment au tap
+   (`data-action="toggle-grimoire-level"`, état `ui.grimoireLevelFilters`, objet éphémère
+   `{ [niveau|'classe']: bool }`) se combine en OR avec les autres niveaux actifs — les sections de
+   plusieurs niveaux s'affichent alors empilées dans la même page. Un chip **"Tous"** dédié
+   (`data-action="toggle-grimoire-level-all"`, en première position sur la même ligne) sert de
+   raccourci maître : actif seulement quand tous les niveaux le sont, il les active/désactive tous
+   d'un coup plutôt que d'être un niveau parmi d'autres. `ensureGrimoireLevelFilters(tabs)`
+   initialise paresseusement `ui.grimoireLevelFilters` avec tous les niveaux à `true` (équivalent
+   visuel à "Tous" sélectionné) au premier rendu, et complète les nouvelles clés qui apparaissent
+   ensuite (ex. activation d'un niveau d'emplacement dans Paramètres) sans toucher aux niveaux déjà
+   togglés par l'utilisateur. Aucun niveau actif affiche "Sélectionnez au moins un niveau."
+   plutôt que la liste vide. Il n'y a plus de swipe horizontal pour naviguer entre niveaux (retiré
+   juillet 2026 en même temps que ce passage en filtres combinables — la notion de niveau "suivant/
+   précédent" n'a plus de sens dès lors que plusieurs peuvent être actifs simultanément) : seul le
+   tap sur les chips permet de les toggler, `#grimoireSwipe` ne portant plus que le scroll vertical
+   du contenu. Même logique dans `renderGrimoirePrepare()`.
    Filtres par type sur la même ligne que le titre "Grimoire", alignés à droite : Action / Bonus
    / Réaction (`GRIMOIRE_FILTERS`, chips `data-action="toggle-grimoire-filter"`). Plusieurs
    filtres actifs se combinent en OR (`spellMatchesGrimoireFilters()`) ; aucun filtre actif =
-   tout afficher. L'état (`ui.grimoireFilters`, éphémère) est conservé en changeant d'onglet de
-   niveau puisqu'il n'est jamais réinitialisé par `renderGrimoire()`/`grimoireStep()`.
+   tout afficher. L'état (`ui.grimoireFilters`, éphémère) est conservé en changeant les filtres de
+   niveau puisqu'il n'est jamais réinitialisé par `renderGrimoire()`.
    **Popup de détail d'un sort** (juillet 2026, tous grimoires, hors mode Préparation) : tap sur
    une ligne de sort (`data-action="open-spell-detail"`) pour ouvrir une popup plein contenu (nom
    complet, niveau, type, portée, description et note, sans troncature ni ellipsis — utile car le
@@ -192,9 +194,9 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    persistant, migré par `sanitizeProfile()`) ; la section `classe` (capacités de classe, de
    serment, et la card `SERMENT` de résumé des préceptes) reste toujours affichée en entier.
    Une page dédiée `renderGrimoirePrepare()` (`view: 'grimoire-prepare'`) permet de choisir les
-   sorts préparés, sans plafond imposé : elle réutilise les onglets de niveau
-   (`grimoireTabs()`/`ui.grimoireTab`/`grimoireStep()`, y compris le swipe, `#grimoireSwipe`
-   partagé puisque les deux pages ne sont jamais montées en même temps) **sans l'onglet Classe**,
+   sorts préparés, sans plafond imposé : elle réutilise les filtres de niveau
+   (`grimoireTabs()`/`ui.grimoireLevelFilters`, `#grimoireSwipe` partagé puisque les deux pages ne
+   sont jamais montées en même temps) **sans l'onglet Classe**,
    filtré (`tabs.filter(t => t !== 'classe')`) puisque les capacités de classe/serment ne sont pas
    préparables — elles n'apparaissent que dans le Grimoire normal. Pour chaque niveau, affiche
    uniquement les sorts préparables (`!spell.alwaysAvailable`) ; les sorts de serment toujours
@@ -205,8 +207,9 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    la version précédente — un simple liseré `border-tint` — se distinguait trop peu du reste de
    la liste. Un badge rond mis en valeur (fond plein, juste le chiffre) affiche le nombre total de
    sorts sélectionnés (tous niveaux confondus) en haut à droite de l'en-tête ; comme la liste
-   affichée ne couvre que le niveau de l'onglet courant, une pastille verte est aussi ajoutée sur
-   chaque onglet de niveau contenant au moins un sort préparé (`grimoireTabsHtml(tabs, dotLevels)`,
+   affichée peut ne couvrir qu'une partie des niveaux (filtres de niveau non tous actifs), une
+   pastille verte est aussi ajoutée sur chaque onglet de niveau contenant au moins un sort préparé
+   (`grimoireTabsHtml(tabs, dotLevels)`,
    paramètre optionnel calculé dans `renderGrimoirePrepare()` uniquement) pour repérer d'un coup
    d'oeil où se trouvent les sorts comptés dans le badge. Filtres dédiés `PREPARE_FILTERS` (état
    `ui.prepareFilters`, éphémère) : Action / Bonus (pas de Réaction — aucun sort de ce type chez
