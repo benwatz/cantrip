@@ -2614,21 +2614,21 @@
       case 'spell-slot-dec': {
         var slotDecLevel = parseInt(e.currentTarget.getAttribute('data-level'), 10);
         var slotDecL = profile().spellLevels.find(function (x) { return x.level === slotDecLevel; });
-        var slotDecFreeIdx = slotDecL.used.indexOf(false);
+        var slotDecFreeIdx = slotDecL.used.lastIndexOf(false);
         if (slotDecFreeIdx !== -1) { slotDecL.used[slotDecFreeIdx] = true; saveState(); render(); }
         break;
       }
       case 'spell-slot-inc': {
         var slotIncLevel = parseInt(e.currentTarget.getAttribute('data-level'), 10);
         var slotIncL = profile().spellLevels.find(function (x) { return x.level === slotIncLevel; });
-        var slotIncUsedIdx = slotIncL.used.lastIndexOf(true);
+        var slotIncUsedIdx = slotIncL.used.indexOf(true);
         if (slotIncUsedIdx !== -1) { slotIncL.used[slotIncUsedIdx] = false; saveState(); render(); }
         break;
       }
       case 'class-badge-dec': {
         var badgeDecCr = profile().classResources.find(function (x) { return x.id === e.currentTarget.getAttribute('data-id'); });
         if (badgeDecCr) {
-          var badgeDecFreeIdx = badgeDecCr.used.indexOf(false);
+          var badgeDecFreeIdx = badgeDecCr.used.lastIndexOf(false);
           if (badgeDecFreeIdx !== -1) { badgeDecCr.used[badgeDecFreeIdx] = true; saveState(); render(); }
         }
         break;
@@ -2636,7 +2636,7 @@
       case 'class-badge-inc': {
         var badgeIncCr = profile().classResources.find(function (x) { return x.id === e.currentTarget.getAttribute('data-id'); });
         if (badgeIncCr) {
-          var badgeIncUsedIdx = badgeIncCr.used.lastIndexOf(true);
+          var badgeIncUsedIdx = badgeIncCr.used.indexOf(true);
           if (badgeIncUsedIdx !== -1) { badgeIncCr.used[badgeIncUsedIdx] = false; saveState(); render(); }
         }
         break;

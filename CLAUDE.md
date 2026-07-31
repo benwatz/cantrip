@@ -95,10 +95,13 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    `border-radius:8px`, rouge/vert), en `flex:none` de part et d'autre d'un conteneur `.hscroll`
    centré (`justify-content:center`, `flex:1`) qui contient les badges. Les deux boutons sont donc
    toujours à la même position horizontale (bord de la carte) quel que soit le nombre de badges ou
-   la largeur du libellé de niveau/ressource au-dessus. `−` (`data-action="spell-slot-dec"` /
-   `"class-badge-dec"`) consomme le premier badge encore disponible (`used.indexOf(false)`) ; `+`
-   (`data-action="spell-slot-inc"` / `"class-badge-inc"`) restaure le dernier badge utilisé
-   (`used.lastIndexOf(true)`) ; sans effet si tous les badges sont déjà dans l'état ciblé. Le tap
+   la largeur du libellé de niveau/ressource au-dessus. Consommation/restauration de droite à
+   gauche (juillet 2026, sens inversé une fois après un premier retour utilisateur) : `−`
+   (`data-action="spell-slot-dec"` / `"class-badge-dec"`) consomme le badge disponible le plus à
+   droite (`used.lastIndexOf(false)`) ; `+` (`data-action="spell-slot-inc"` / `"class-badge-inc"`)
+   restaure le badge utilisé le plus à gauche (`used.indexOf(true)`, c'est-à-dire le dernier
+   consommé puisque la consommation part de la droite) ; sans effet si tous les badges sont déjà
+   dans l'état ciblé. Le tap
    direct sur un badge (`data-action="toggle-spell"`/`"toggle-class"`) continue de fonctionner en
    parallèle pour (dé)cocher un emplacement précis. Les ressources de type `counter` ne sont pas
    concernées (leurs boutons −/+ existants, `counter-dec`/`counter-inc`, jouent déjà ce rôle).
