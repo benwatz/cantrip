@@ -1281,7 +1281,7 @@
           return '<div class="badge ' + (used ? 'badge-used' : 'badge-available') + '" data-action="toggle-spell" data-level="' + l.level + '" data-index="' + i + '">' + l.level + '</div>';
         }).join('');
         return '<div style="display:flex;flex-direction:column;gap:4px">' +
-          '<div style="font-size:11px;color:var(--text-muted);font-weight:600">Niveau ' + l.level + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);font-weight:600;text-align:center">Niveau ' + l.level + '</div>' +
           '<div style="display:flex;align-items:center;gap:8px">' +
             '<div data-action="spell-slot-dec" data-level="' + l.level + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">&minus;</div>' +
             '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding-bottom:2px">' + badges + '</div>' +
@@ -1299,7 +1299,7 @@
     var classResourcesHtml = p.classResources.map(function (cr) {
       if (cr.type === 'counter') {
         return '<div style="display:flex;flex-direction:column;gap:6px">' +
-          '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em;text-align:center">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
           '<div style="display:flex;align-items:center;justify-content:center;gap:10px">' +
             '<div data-action="counter-dec" data-id="' + cr.id + '" style="flex:none;width:34px;height:34px;border-radius:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.45);color:#ef4444;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none">&minus;</div>' +
             '<div style="font-size:17px;font-weight:700;color:var(--text-main);min-width:52px;text-align:center">' + cr.current + ' / ' + cr.max + '</div>' +
@@ -1311,7 +1311,7 @@
         return '<div class="badge ' + (used ? 'badge-used' : 'badge-available') + '" data-action="toggle-class" data-id="' + cr.id + '" data-index="' + i + '">' + (i + 1) + '</div>';
       }).join('');
       return '<div style="display:flex;flex-direction:column;gap:6px">' +
-        '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
+        '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em;text-align:center">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<div data-action="class-badge-dec" data-id="' + cr.id + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">&minus;</div>' +
           '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding-bottom:2px">' + cbadges + '</div>' +
