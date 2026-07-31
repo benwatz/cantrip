@@ -104,7 +104,10 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    dans l'état ciblé. Le tap
    direct sur un badge (`data-action="toggle-spell"`/`"toggle-class"`) continue de fonctionner en
    parallèle pour (dé)cocher un emplacement précis. Les ressources de type `counter` ne sont pas
-   concernées (leurs boutons −/+ existants, `counter-dec`/`counter-inc`, jouent déjà ce rôle).
+   concernées par ces boutons dédiés (leurs boutons −/+ existants, `counter-dec`/`counter-inc`,
+   jouent déjà ce rôle), mais le groupe entier (`−`/valeur/`+`) est lui aussi centré horizontalement
+   dans la carte (`justify-content:center`, juillet 2026) plutôt qu'aligné à gauche, pour rester
+   visuellement cohérent avec les rangées de badges.
    Deux marqueurs toggle (`profile.concentration`, `profile.inspiration`, booléens indépendants)
    alignés à droite sur la ligne du nom du personnage, dans l'ordre inspiration puis
    concentration : point d'inspiration (icône étoile
