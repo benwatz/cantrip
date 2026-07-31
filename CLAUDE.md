@@ -90,12 +90,18 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    tronqués en ellipsis CSS si trop longs plutôt que d'être abrégés en JS. Uniquement des armes :
    pas de notion de sort dans ce bloc (choix explicite — voir Décisions de conception).
    **Rangées de badges** (emplacements de sorts par niveau, ressources de classe de type
-   `badges`) : chaque rangée est encadrée par un bouton `−` à gauche et `+` à droite (juillet
-   2026, même gabarit que les boutons −/+ des compétences dans Paramétrer le Personnage — 36×36,
-   `border-radius:8px`, rouge/vert), en `flex:none` de part et d'autre d'un conteneur `.hscroll`
-   centré (`justify-content:center`, `flex:1`) qui contient les badges. Les deux boutons sont donc
-   toujours à la même position horizontale (bord de la carte) quel que soit le nombre de badges ou
-   la largeur du libellé de niveau/ressource au-dessus. Consommation/restauration de droite à
+   `badges`) : chaque rangée de niveau de sort est encadrée par un bouton `−` à gauche et `+` à
+   droite (juillet 2026, même gabarit que les boutons −/+ des compétences dans Paramétrer le
+   Personnage — 36×36, `border-radius:8px`, rouge/vert), en `flex:none` de part et d'autre d'un
+   conteneur `.hscroll` centré (`justify-content:center`, `flex:1`) qui contient les badges. Les
+   deux boutons sont donc toujours à la même position horizontale (bord de la carte) quel que soit
+   le nombre de badges ou la largeur du libellé de niveau au-dessus. Pour les ressources de classe
+   de type `badges` en revanche, ces boutons ne sont affichés qu'à partir de 3 emplacements
+   (`cr.used.length >= 3` — en dessous, le tap direct sur l'unique/les deux badges suffit et les
+   boutons prendraient plus de place que la ressource elle-même) et, quand ils sont présents, sont
+   collés directement aux badges plutôt qu'aux bords de la carte (`justify-content:center` sur la
+   rangée entière, badges en largeur naturelle plutôt qu'en `flex:1`) : le groupe entier
+   (`−`/badges/`+`) est centré comme un seul bloc compact. Consommation/restauration de droite à
    gauche (juillet 2026, sens inversé une fois après un premier retour utilisateur) : `−`
    (`data-action="spell-slot-dec"` / `"class-badge-dec"`) consomme le badge disponible le plus à
    droite (`used.lastIndexOf(false)`) ; `+` (`data-action="spell-slot-inc"` / `"class-badge-inc"`)
@@ -103,10 +109,12 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    consommé puisque la consommation part de la droite) ; sans effet si tous les badges sont déjà
    dans l'état ciblé. Le tap
    direct sur un badge (`data-action="toggle-spell"`/`"toggle-class"`) continue de fonctionner en
-   parallèle pour (dé)cocher un emplacement précis. Les ressources de type `counter` ne sont pas
-   concernées par ces boutons dédiés (leurs boutons −/+ existants, `counter-dec`/`counter-inc`,
-   jouent déjà ce rôle), mais le groupe entier (`−`/valeur/`+`) est lui aussi centré horizontalement
-   dans la carte (`justify-content:center`, juillet 2026) plutôt qu'aligné à gauche, pour rester
+   parallèle pour (dé)cocher un emplacement précis, y compris pour les ressources à 1 ou 2
+   emplacements qui n'ont pas d'autre moyen d'interaction. Les ressources de type `counter` ne sont
+   pas concernées par ces boutons dédiés (leurs boutons −/+ existants, `counter-dec`/`counter-inc`,
+   jouent déjà ce rôle, quel que soit `max`), mais le groupe entier (`−`/valeur/`+`) est lui aussi
+   centré horizontalement dans la carte (`justify-content:center`, juillet 2026) plutôt qu'aligné à
+   gauche, pour rester
    visuellement cohérent avec les rangées de badges.
    Deux marqueurs toggle (`profile.concentration`, `profile.inspiration`, booléens indépendants)
    alignés à droite sur la ligne du nom du personnage, dans l'ordre inspiration puis

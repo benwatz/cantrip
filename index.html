@@ -1310,13 +1310,19 @@
       var cbadges = cr.used.map(function (used, i) {
         return '<div class="badge ' + (used ? 'badge-used' : 'badge-available') + '" data-action="toggle-class" data-id="' + cr.id + '" data-index="' + i + '">' + (i + 1) + '</div>';
       }).join('');
+      // En dessous de 3 emplacements, les boutons -/+ n'apportent rien (autant taper directement
+      // sur l'unique/les deux badges) et prennent plus de place que la ressource elle-même : ils
+      // ne s'affichent qu'à partir de 3, collés aux badges plutôt qu'aux bords de la carte.
+      var badgesRowHtml = cr.used.length >= 3
+        ? '<div style="display:flex;align-items:center;justify-content:center;gap:8px">' +
+            '<div data-action="class-badge-dec" data-id="' + cr.id + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">&minus;</div>' +
+            '<div class="hscroll" style="min-width:0;max-width:100%;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + cbadges + '</div>' +
+            '<div data-action="class-badge-inc" data-id="' + cr.id + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#22c55e;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">+</div>' +
+          '</div>'
+        : '<div class="hscroll" style="display:flex;gap:8px;overflow-x:auto;justify-content:center;padding-bottom:2px">' + cbadges + '</div>';
       return '<div style="display:flex;flex-direction:column;gap:6px">' +
         '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em;text-align:center">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-          '<div data-action="class-badge-dec" data-id="' + cr.id + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">&minus;</div>' +
-          '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding-bottom:2px">' + cbadges + '</div>' +
-          '<div data-action="class-badge-inc" data-id="' + cr.id + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#22c55e;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">+</div>' +
-        '</div>' +
+        badgesRowHtml +
         '</div>';
     }).join('<div style="height:10px"></div>');
 
