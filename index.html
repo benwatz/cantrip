@@ -1372,9 +1372,13 @@
       { key: 'spellAttackBonus', label: 'Sorts', display: formatSigned(p.combatStats.spellAttackBonus), inputValue: formatSigned(p.combatStats.spellAttackBonus), inputMode: 'text', pattern: '-?[0-9]*' },
       { key: 'hitDice', label: 'Dés de vie', display: escapeHtml(p.combatStats.hitDice) || '—', inputValue: escapeHtml(p.combatStats.hitDice), inputMode: 'text', pattern: '.*' }
     ].map(function (stat) {
+      // Cinzel n'a pas de vrai "d" bas-de-casse (ses minuscules ressemblent à des petites
+      // capitales) : "8d10" y ressemble visuellement à "8D10". On sort donc les dés de vie de
+      // cette police pour que le "d" reste lisiblement minuscule.
+      var fontClass = stat.key === 'hitDice' ? '' : 'font-cinzel';
       var valueHtml = ui.editingCombatStat === stat.key
-        ? '<input id="combatStatInput" data-key="' + stat.key + '" type="text" inputmode="' + stat.inputMode + '" pattern="' + stat.pattern + '" value="' + stat.inputValue + '" style="width:100%;font-size:17px;font-weight:700;color:var(--text-gold);background:transparent;border:none;border-bottom:1px solid var(--text-gold);outline:none;padding:0;text-align:center;box-sizing:border-box" class="font-cinzel"/>'
-        : '<div data-action="edit-combat-stat" data-key="' + stat.key + '" style="font-size:17px;font-weight:700;color:var(--text-gold);cursor:pointer;border-bottom:1px dashed transparent" class="font-cinzel">' + stat.display + '</div>';
+        ? '<input id="combatStatInput" data-key="' + stat.key + '" type="text" inputmode="' + stat.inputMode + '" pattern="' + stat.pattern + '" value="' + stat.inputValue + '" style="width:100%;font-size:17px;font-weight:700;color:var(--text-gold);background:transparent;border:none;border-bottom:1px solid var(--text-gold);outline:none;padding:0;text-align:center;box-sizing:border-box" class="' + fontClass + '"/>'
+        : '<div data-action="edit-combat-stat" data-key="' + stat.key + '" style="font-size:17px;font-weight:700;color:var(--text-gold);cursor:pointer;border-bottom:1px dashed transparent" class="' + fontClass + '">' + stat.display + '</div>';
       return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:10px;padding:7px 6px">' +
         '<div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em">' + stat.label + '</div>' +
         valueHtml +
