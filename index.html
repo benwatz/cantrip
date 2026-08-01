@@ -1293,7 +1293,7 @@
           return '<div data-action="' + action + '" data-level="' + l.level + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:' + (disabled ? 'default' : 'pointer') + ';user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
         };
         return '<div style="display:flex;align-items:center;gap:8px">' +
-          '<div style="flex:none;width:60px;font-size:13px;font-weight:600;color:var(--text-label)">Niveau ' + l.level + '</div>' +
+          '<div style="flex:none;width:56px;font-size:11px;font-weight:600;color:var(--text-label);white-space:nowrap">Niveau ' + l.level + '</div>' +
           slotBtn('spell-slot-dec', !canDec, '&minus;') +
           '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding:2px 0">' + dots + '</div>' +
           slotBtn('spell-slot-inc', !canInc, '+') +
