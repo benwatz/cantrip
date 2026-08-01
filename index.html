@@ -200,6 +200,23 @@
   }
   .drive-toast-enter { animation: drive-toast-in 260ms ease-out; }
   .drive-toast-leave { animation: drive-toast-out 260ms ease-in forwards; }
+  .rest-toast {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(18px, env(safe-area-inset-bottom) + 14px);
+    z-index: 80;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: #157a3d;
+    color: #f0fff4;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+  }
+  .rest-toast-enter { animation: drive-toast-in 260ms ease-out; }
+  .rest-toast-leave { animation: drive-toast-out 260ms ease-in forwards; }
   @keyframes codex-preview-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
   @keyframes codex-preview-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
   @keyframes codex-preview-card-in {
@@ -795,6 +812,8 @@
     driveError: null, // dernier message d'erreur Drive à afficher sur "Charger un personnage"
     driveToast: null, // null | { message: string, leaving: bool } — confirmation de succès Charger/Sauvegarder
     driveToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
+    restToast: null, // null | { leaving: bool } — confirmation "Vous êtes reposé(e)." après la modale Repos
+    restToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     driveConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Drive est ouverte
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
@@ -1196,6 +1215,9 @@
     }
     if (ui.driveToast) {
       app.insertAdjacentHTML('beforeend', renderDriveToast());
+    }
+    if (ui.restToast) {
+      app.insertAdjacentHTML('beforeend', renderRestToast());
     }
     if (ui.codexPreview) {
       app.insertAdjacentHTML('beforeend', renderCodexPreviewModal());
@@ -2280,6 +2302,13 @@
     return '<div class="drive-toast ' + anim + '">' + escapeHtml(ui.driveToast.message) + '</div>';
   }
 
+  function renderRestToast() {
+    var entering = ui.restToastEnterPending;
+    ui.restToastEnterPending = false;
+    var anim = ui.restToast.leaving ? 'rest-toast-leave' : (entering ? 'rest-toast-enter' : '');
+    return '<div class="rest-toast ' + anim + '">Vous êtes reposé(e).</div>';
+  }
+
   // ---- event binding ----
   function bindEvents(focusedSearchId) {
     app.querySelectorAll('[data-action]').forEach(function (el) {
@@ -3244,6 +3273,31 @@
     render();
   }
 
+  // ---- toast de confirmation "Vous êtes reposé(e)." (modale Repos) ----
+  var REST_TOAST_VISIBLE_MS = 2200;
+  var REST_TOAST_LEAVE_MS = 260;
+  var restToastHideTimer = null;
+  var restToastRemoveTimer = null;
+
+  function showRestToast() {
+    ui.restToast = { leaving: false };
+    ui.restToastEnterPending = true;
+    clearTimeout(restToastHideTimer);
+    clearTimeout(restToastRemoveTimer);
+    restToastHideTimer = setTimeout(startLeavingRestToast, REST_TOAST_VISIBLE_MS);
+  }
+
+  function startLeavingRestToast() {
+    if (!ui.restToast || ui.restToast.leaving) return;
+    ui.restToast.leaving = true;
+    clearTimeout(restToastRemoveTimer);
+    restToastRemoveTimer = setTimeout(function () {
+      ui.restToast = null;
+      render();
+    }, REST_TOAST_LEAVE_MS);
+    render();
+  }
+
   function applyDamage() {
     var hp = profile().hp;
     if (hp.temp > 0) {
@@ -3293,6 +3347,7 @@
     applyRestChecks();
     ui.shortRestOpen = false;
     saveState();
+    showRestToast();
     render();
   }
 
@@ -3305,6 +3360,7 @@
     ui.draftPreparedSpells = profile().preparedSpells.slice();
     ui.view = 'grimoire-prepare';
     saveState();
+    showRestToast();
     render();
   }
 
