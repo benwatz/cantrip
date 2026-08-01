@@ -1236,22 +1236,26 @@
   // (juillet 2026, alignement demandé par l'utilisateur après plusieurs itérations).
   function renderAttackRow(atk) {
     var rangeSuffix = (!atk.melee && atk.rangeMeters > 0)
-      ? ' <span style="font-size:11px;font-weight:400;color:var(--text-muted)">(' + atk.rangeMeters + 'm)</span>'
+      ? ' <span style="font-size:20px;font-weight:400;color:var(--text-muted)">(' + atk.rangeMeters + 'm)</span>'
       : '';
     var diceText = atk.damageDice ? (escapeHtml(atk.damageDice) + (atk.damageBonus ? formatSigned(atk.damageBonus) : '')) : '';
     var typeText = atk.damageType ? escapeHtml(atk.damageType) : '';
-    return '<div style="display:grid;grid-template-columns:repeat(5,1fr);align-items:center;gap:6px;padding:9px 0">' +
-      '<div style="grid-column:span 3;display:flex;align-items:center;gap:6px;min-width:0">' +
-        '<div style="flex:none;width:16px;height:16px;color:var(--text-muted)">' + (atk.melee ? iconSword() : iconBow()) + '</div>' +
-        '<div style="min-width:0;font-size:12.5px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(atk.name) + rangeSuffix + '</div>' +
+    return '<div style="display:flex;flex-direction:column;gap:6px;padding:12px 0">' +
+      '<div style="display:flex;align-items:center;gap:8px;min-width:0">' +
+        '<div style="flex:none;width:24px;height:24px;color:var(--text-muted)">' + (atk.melee ? iconSword() : iconBow()) + '</div>' +
+        '<div style="min-width:0;font-size:25px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(atk.name) + rangeSuffix + '</div>' +
       '</div>' +
-      '<div style="grid-column:span 1;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0">' +
-        '<div style="flex:none;width:14px;height:14px;color:var(--text-muted)">' + ICON_TARGET + '</div>' +
-        '<div style="flex:none;font-size:14px;color:var(--accent-blue-text);font-weight:700">' + formatSigned(atk.attackBonus) + '</div>' +
-      '</div>' +
-      '<div style="grid-column:span 1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:0">' +
-        (diceText ? '<div style="font-size:12.5px;font-weight:600;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center">' + diceText + '</div>' : '') +
-        (typeText ? '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center">' + typeText + '</div>' : '') +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+        '<div style="display:flex;align-items:center;gap:6px;flex:none">' +
+          '<div style="flex:none;width:22px;height:22px;color:var(--text-muted)">' + ICON_TARGET + '</div>' +
+          '<div style="font-size:28px;color:var(--accent-blue-text);font-weight:700">' + formatSigned(atk.attackBonus) + '</div>' +
+        '</div>' +
+        (diceText || typeText
+          ? '<div style="display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden">' +
+              (diceText ? '<div style="flex:none;font-size:25px;font-weight:600;color:var(--text-main);white-space:nowrap">' + diceText + '</div>' : '') +
+              (typeText ? '<div style="min-width:0;font-size:20px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + typeText + '</div>' : '') +
+            '</div>'
+          : '') +
       '</div>' +
     '</div>';
   }
