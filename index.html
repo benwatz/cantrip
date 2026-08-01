@@ -1327,12 +1327,16 @@
       var crAvailableCount = cr.used.filter(function (used) { return !used; }).length;
       var crCanDec = crAvailableCount > 0;
       var crCanInc = crAvailableCount < crTotal;
+      // A 1 ou 2 emplacements, il n'y a pas de boutons -/+ (voir plus bas) : la pastille est le
+      // seul point de contact, donc on la double de taille pour rester facile à toucher.
+      var dotSize = crTotal < 3 ? 40 : 20;
+      var dotBorderWidth = crTotal < 3 ? 3 : 2;
       var cbadges = cr.used.map(function (used, i) {
         var filled = !used;
-        return '<div data-action="toggle-class" data-id="' + cr.id + '" data-index="' + i + '" style="flex:none;width:20px;height:20px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
+        return '<div data-action="toggle-class" data-id="' + cr.id + '" data-index="' + i + '" style="flex:none;width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
           (filled
-            ? 'background:var(--text-gold);border:2px solid var(--text-gold)'
-            : 'background:transparent;border:2px solid rgba(var(--border-tint),0.35)') +
+            ? 'background:var(--text-gold);border:' + dotBorderWidth + 'px solid var(--text-gold)'
+            : 'background:transparent;border:' + dotBorderWidth + 'px solid rgba(var(--border-tint),0.35)') +
           '"></div>';
       }).join('');
       var classSlotBtn = function (action, disabled, symbol) {
