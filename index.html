@@ -1290,7 +1290,7 @@
             '"></div>';
         }).join('');
         var slotBtn = function (action, disabled, symbol) {
-          return '<div data-action="' + action + '" data-level="' + l.level + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:' + (disabled ? 'default' : 'pointer') + ';user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
+          return '<div data-action="' + action + '" data-level="' + l.level + '" style="flex:none;width:38px;height:38px;border-radius:9px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:' + (disabled ? 'default' : 'pointer') + ';user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
         };
         return '<div style="display:flex;align-items:center;gap:8px">' +
           '<div style="flex:none;width:56px;font-size:11px;font-weight:600;color:var(--text-label);white-space:nowrap">Niveau ' + l.level + '</div>' +
@@ -1309,12 +1309,17 @@
 
     var classResourcesHtml = p.classResources.map(function (cr) {
       if (cr.type === 'counter') {
+        var counterCanDec = cr.current > 0;
+        var counterCanInc = cr.current < cr.max;
+        var counterBtn = function (action, disabled, symbol) {
+          return '<div data-action="' + action + '" data-id="' + cr.id + '" style="flex:none;width:38px;height:38px;border-radius:9px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:19px;font-weight:700;cursor:' + (disabled ? 'default' : 'pointer') + ';display:flex;align-items:center;justify-content:center;user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
+        };
         return '<div style="display:flex;flex-direction:column;gap:6px">' +
           '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em;text-align:center">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
           '<div style="display:flex;align-items:center;justify-content:center;gap:10px">' +
-            '<div data-action="counter-dec" data-id="' + cr.id + '" style="flex:none;width:34px;height:34px;border-radius:6px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.45);color:#ef4444;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none">&minus;</div>' +
+            counterBtn('counter-dec', !counterCanDec, '&minus;') +
             '<div style="font-size:17px;font-weight:700;color:var(--text-main);min-width:52px;text-align:center">' + cr.current + ' / ' + cr.max + '</div>' +
-            '<div data-action="counter-inc" data-id="' + cr.id + '" style="flex:none;width:34px;height:34px;border-radius:6px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.45);color:#22c55e;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none">+</div>' +
+            counterBtn('counter-inc', !counterCanInc, '+') +
           '</div>' +
           '</div>';
       }
@@ -1331,7 +1336,7 @@
           '"></div>';
       }).join('');
       var classSlotBtn = function (action, disabled, symbol) {
-        return '<div data-action="' + action + '" data-id="' + cr.id + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:' + (disabled ? 'default' : 'pointer') + ';user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
+        return '<div data-action="' + action + '" data-id="' + cr.id + '" style="flex:none;width:38px;height:38px;border-radius:9px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:' + (disabled ? 'default' : 'pointer') + ';user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
       };
       // En dessous de 3 emplacements, les boutons -/+ n'apportent rien (autant taper directement
       // sur l'unique/les deux badges) et prennent plus de place que la ressource elle-même : ils
