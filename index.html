@@ -1277,18 +1277,29 @@
     var spellGroupsHtml = p.spellLevels
       .filter(function (l) { return l.enabled && l.max > 0; })
       .map(function (l) {
-        var badges = l.used.map(function (used, i) {
-          return '<div class="badge ' + (used ? 'badge-used' : 'badge-available') + '" data-action="toggle-spell" data-level="' + l.level + '" data-index="' + i + '">' + l.level + '</div>';
+        var total = l.used.length;
+        var availableCount = l.used.filter(function (used) { return !used; }).length;
+        var canDec = availableCount > 0;
+        var canInc = availableCount < total;
+        var dots = l.used.map(function (used, i) {
+          var filled = !used;
+          return '<div data-action="toggle-spell" data-level="' + l.level + '" data-index="' + i + '" style="flex:none;width:20px;height:20px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
+            (filled
+              ? 'background:var(--text-gold);border:2px solid var(--text-gold)'
+              : 'background:transparent;border:2px solid rgba(var(--border-tint),0.35)') +
+            '"></div>';
         }).join('');
-        return '<div style="display:flex;flex-direction:column;gap:4px">' +
-          '<div style="font-size:11px;color:var(--text-muted);font-weight:600;text-align:center">Niveau ' + l.level + '</div>' +
-          '<div style="display:flex;align-items:center;gap:8px">' +
-            '<div data-action="spell-slot-dec" data-level="' + l.level + '" style="flex:none;width:44px;height:44px;border-radius:10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">&minus;</div>' +
-            '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding-bottom:2px">' + badges + '</div>' +
-            '<div data-action="spell-slot-inc" data-level="' + l.level + '" style="flex:none;width:44px;height:44px;border-radius:10px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#22c55e;font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none">+</div>' +
-          '</div>' +
+        var slotBtn = function (action, disabled, symbol) {
+          return '<div data-action="' + action + '" data-level="' + l.level + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:' + (disabled ? 'transparent' : 'var(--bg-card-alt)') + ';border:1px solid rgba(var(--border-tint),' + (disabled ? '0.12' : '0.32') + ');color:' + (disabled ? 'var(--text-dim)' : 'var(--text-main)') + ';font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:' + (disabled ? 'default' : 'pointer') + ';user-select:none;pointer-events:' + (disabled ? 'none' : 'auto') + '">' + symbol + '</div>';
+        };
+        return '<div style="display:flex;align-items:center;gap:8px">' +
+          '<div style="flex:none;width:60px;font-size:13px;font-weight:600;color:var(--text-label)">Niveau ' + l.level + '</div>' +
+          slotBtn('spell-slot-dec', !canDec, '&minus;') +
+          '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding:2px 0">' + dots + '</div>' +
+          slotBtn('spell-slot-inc', !canInc, '+') +
+          '<div style="flex:none;width:34px;text-align:right;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums">' + availableCount + '/' + total + '</div>' +
           '</div>';
-      }).join('');
+      }).join('<div style="height:2px"></div>');
 
     var attacksBodyHtml = p.attacks.map(function (atk, i) {
       return (i > 0 ? '<hr style="border:none;border-top:1px solid rgba(var(--border-tint),0.14);margin:0">' : '') + renderAttackRow(atk);
