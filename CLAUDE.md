@@ -95,7 +95,9 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    40px/3px en août 2026 pour rester facile à toucher, puis rabaissée de 33% après un premier
    retour utilisateur — les emplacements de sorts et les ressources de classe partagent désormais
    la même taille, quel que soit le nombre d'emplacements, ce qui a supprimé l'ancien cas
-   particulier `dotSize = crTotal < 3 ? 40 : 20`).
+   particulier `dotSize = crTotal < 3 ? 40 : 20`), séparées par un `gap` de 6px (également réduit
+   depuis 8px pour que 4 badges tiennent toujours sur une ligne sans scroll, cas courant côté
+   emplacements de sorts comme côté ressources).
    À partir de 3 emplacements, chaque rangée est encadrée par un bouton `−` à gauche et un bouton
    `+` à droite (juillet 2026 ; 44×44, `border-radius:10px`, même
    esprit que le gabarit des boutons −/+ des compétences dans Paramétrer le Personnage mais
@@ -107,12 +109,12 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    dessous, le tap direct sur l'unique/les deux badges suffit et les boutons prendraient plus de
    place que la ressource elle-même) ; en dessous de 3, seule la rangée de badges centrée
    (`justify-content:safe center`, sans les boutons) est affichée. `safe center` (plutôt qu'un
-   simple `center`) évite un piège CSS classique : dès que les badges à 40px dépassent la largeur
-   disponible (typiquement 3 emplacements ou plus sur un écran étroit), un `justify-content:center`
+   simple `center`) évite un piège CSS classique : dès que les badges dépassent la largeur
+   disponible (typiquement 4 emplacements ou plus sur un écran étroit), un `justify-content:center`
    nu centre quand même le contenu qui déborde et rend le premier/dernier badge à moitié coupé et
    hors d'atteinte du scroll ; `safe center` retombe sur un alignement au début dès qu'il y a
    débordement, ce qui garde tous les badges pleinement visibles et atteignables (bug corrigé août
-   2026, provoqué par le doublement de taille). Consommation/restauration de droite à
+   2026, provoqué par le doublement de taille d'alors). Consommation/restauration de droite à
    gauche (juillet 2026, sens inversé une fois après un premier retour utilisateur) : `−`
    (`data-action="spell-slot-dec"` / `"class-badge-dec"`) consomme le badge disponible le plus à
    droite (`used.lastIndexOf(false)`) ; `+` (`data-action="spell-slot-inc"` / `"class-badge-inc"`)
@@ -126,14 +128,25 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    34×34, jouent déjà ce rôle, quel que soit `max`), mais le groupe entier (`−`/valeur/`+`) est lui
    aussi centré horizontalement dans la carte (`justify-content:center`, juillet 2026) plutôt
    qu'aligné à gauche, pour rester visuellement cohérent avec les rangées de badges.
+   Le libellé de niveau abrège "Niveau N" en **"Niv.N"** (août 2026, plus court) dans une colonne de
+   28px de large à gauche de la rangée, avec le compteur "x/x" dans une colonne de 34px à droite
+   (assez pour "12/12", le max clampé des emplacements de sorts). Les mêmes deux largeurs (28px puis
+   34px) sont reproduites en marges vides sur la rangée de badges des ressources de classe (à partir
+   de 3 emplacements) exprès pour que les pastilles des deux blocs restent parfaitement alignées
+   verticalement d'une carte à l'autre malgré leurs contenus différents (libellé texte à gauche pour
+   les sorts, rien pour les ressources qui ont leur propre libellé centré au-dessus) — capture
+   utilisateur à l'appui montrant le désalignement avant ce correctif.
    Deux marqueurs toggle (`profile.concentration`, `profile.inspiration`, booléens indépendants)
    alignés à droite sur la ligne du nom du personnage, dans l'ordre inspiration puis
-   concentration : point d'inspiration (icône dé à 20 faces `iconD20(filled)` — remplace l'icône
-   étoile d'origine en août 2026, plus parlante pour un jeu D&D ; même principe filled/outline que
-   `iconStar` — toujours utilisée par les favoris du Grimoire, voir plus bas — mais avec les lignes
-   de facettes internes qui passent en `var(--bg-nav)` à l'état rempli pour rester visibles sur le
-   fond plein), se remplit — `fill:currentColor` — quand actif, simple surbrillance ambre,
-   pas de glow) et concentration (icône smiley aux sourcils froncés `ICON_CONCENTRATION`, glow
+   concentration : point d'inspiration (icône dé à 20 faces `ICON_D20`, constante SVG plutôt que
+   fonction — remplace en août 2026 d'abord l'étoile d'origine, puis un premier essai dessiné à la
+   main jugé peu convaincant par l'utilisateur, au profit de l'icône officielle "Dice Twenty Faces
+   Twenty" de Delapouite sur [game-icons.net](https://game-icons.net/) (CC BY 3.0, voir
+   `README.md`) ; un seul `<path fill="currentColor">` dont les facettes et les chiffres du dé sont
+   des trous (contours internes de sens opposé dans le path), donc pas de variante filled/outline
+   séparée comme `iconStar` — la couleur du bouton parent, déjà togglée gold/dim selon
+   `p.inspiration`, suffit à distinguer les deux états, exactement comme `ICON_CONCENTRATION`) et
+   concentration (icône smiley aux sourcils froncés `ICON_CONCENTRATION`, glow
    violet animé via la classe `concentration-active` / `@keyframes concentration-pulse`).
    Concentration active déclenche deux effets supplémentaires sur le bloc PV : un liseret violet
    avec traînée tourne en continu autour du bloc (`hp-concentration-ring`, angle animé via une
@@ -197,6 +210,9 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    nom — son clic appelle `e.stopPropagation()` dans le handler `toggle-favorite-spell` pour ne
    pas aussi déclencher l'ouverture de la popup, ligne et étoile portant chacune leur propre
    `data-action` donc leur propre listener de clic).
+   Pas de titre "Grimoire" en tête de page en V2 (retiré en août 2026 pour remonter le champ de
+   recherche tout en haut, gagner une ligne verticale) — contrairement à V1 et à la plupart des
+   autres pages qui gardent leur titre `font-cinzel` en première position.
    V2 remplace les filtres de niveau combinables par une barre à 5 zones sous le champ de
    recherche : un bouton **"Tous"** (à gauche), une **flèche gauche** puis un **bouton central**
    affichant le niveau courant (ex. "Niveau 3" ou "Classe") et une **flèche droite** (au centre,
@@ -205,7 +221,13 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    via `transform:scaleX(-1)` sur son conteneur, même technique que les flèches du carrousel
    "Charger un personnage" — plutôt que des glyphes `−`/`+` (remplacés en août 2026, après un
    premier retour utilisateur qui les trouvait moins lisibles que de vraies flèches directionnelles
-   sur un sélecteur de niveau). Un tap sur le bouton central
+   sur un sélecteur de niveau). Boutons agrandis à 44×44 (depuis 34×34, août 2026, jugés trop
+   petits pour être tapés confortablement) ; le bouton central n'utilise plus `flex:1` mais une
+   largeur au contenu (`padding:0 14px`, sans `min-width`) pour ne pas accaparer l'espace gagné par
+   cet agrandissement — son texte ("Tous les sorts" au pire cas) tient largement dedans, donc la
+   barre entière est maintenant plus étroite que la carte et centrée dedans
+   (`justify-content:center` sur la ligne) plutôt que de l'occuper toute la largeur. Un tap sur le
+   bouton central
    (`data-action="toggle-grimoire-level-menu"`, état `ui.grimoireLevelMenuOpen`) ouvre une grille
    de sélection directe de tous les niveaux + "Classe" (`grimoireTabs()`, inchangée, toujours la
    seule source pour le cycle −/+ et cette grille), qui se referme au choix d'une entrée — le
