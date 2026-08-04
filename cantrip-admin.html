@@ -213,6 +213,9 @@
 
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--border-strong);color:var(--ink-bright);padding:10px 20px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity 0.25s;z-index:100;}
   .toast.show{opacity:1;}
+
+  .sync-footer{max-width:1200px;margin:0 auto;padding:2px 26px 22px;display:flex;gap:8px 22px;flex-wrap:wrap;justify-content:center;font-size:12px;color:var(--text-dim);}
+  .sync-footer .refresh-link{cursor:pointer;text-decoration:underline;color:var(--text-muted);}
 </style>
 </head>
 <body>
@@ -253,6 +256,8 @@
     <div class="actions" id="sidePanelActions"></div>
   </div>
 </div>
+
+<div class="sync-footer" id="syncFooter"></div>
 
 <!-- Modal: add/edit spell -->
 <div class="modal-backdrop" id="spellModalBackdrop">
@@ -1625,6 +1630,7 @@ function driveLoadPersonnage() {
     saveState();
     render();
     showToast('Le personnage a été chargé avec succès.', 'success');
+    recordSyncEvent('lastLoad', charId);
   }).catch(function (err) {
     showToast(err.message || 'Echec du chargement Drive', true);
   });
@@ -1637,16 +1643,86 @@ function driveSavePersonnage() {
   showToast('Sauvegarde sur Drive...');
   driveSaveBdd(function (bdd) {
     bdd[charId] = payload;
+    bdd._meta = bdd._meta || {};
+    bdd._meta.lastSave = { at: new Date().toISOString(), charId: charId, source: 'admin' };
     return bdd;
-  }).then(function () {
+  }).then(function (bdd) {
     showToast('Le personnage a été sauvegardé avec succès.', 'success');
+    updateSyncMetaDisplay(bdd._meta);
   }).catch(function (err) {
     showToast(err.message || 'Echec de la sauvegarde Drive', true);
   });
 }
 
+// ---- footer : date/heure du dernier chargement et de la derniere sauvegarde, tous appareils
+// confondus (bdd.json._meta, ecrit aussi bien par cet outil que par l'app index.html). Un cache
+// local (independant de DRIVE_META_KEY) permet d'afficher immediatement la derniere valeur connue
+// au chargement de la page, sans forcer une authentification Google au demarrage.
+var SYNC_META_CACHE_KEY = 'cantrip_admin_sync_meta_cache';
+var SYNC_SOURCE_LABELS = { app: "l'application", admin: "l'outil admin" };
+
+function loadSyncMetaCache() {
+  try { return JSON.parse(localStorage.getItem(SYNC_META_CACHE_KEY)) || {}; } catch (e) { return {}; }
+}
+
+function formatSyncDate(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderSyncFooter(meta) {
+  var el = document.getElementById('syncFooter');
+  if (!el) return;
+  meta = meta || {};
+  function line(label, entry) {
+    if (!entry || !entry.at) return label + ' : jamais';
+    var charName = CHARACTER_NAMES[entry.charId] || entry.charId;
+    var src = SYNC_SOURCE_LABELS[entry.source] || entry.source;
+    return label + ' : ' + formatSyncDate(entry.at) + ' — ' + charName + ' (' + src + ')';
+  }
+  el.innerHTML =
+    '<span>' + line('Dernier chargement', meta.lastLoad) + '</span>' +
+    '<span>' + line('Dernière sauvegarde', meta.lastSave) + '</span>' +
+    '<span class="refresh-link" id="syncFooterRefresh">Actualiser</span>';
+  var refreshBtn = document.getElementById('syncFooterRefresh');
+  if (refreshBtn) refreshBtn.addEventListener('click', refreshSyncMeta);
+}
+
+function updateSyncMetaDisplay(meta) {
+  meta = meta || {};
+  try { localStorage.setItem(SYNC_META_CACHE_KEY, JSON.stringify(meta)); } catch (e) {}
+  renderSyncFooter(meta);
+}
+
+// Ecriture best-effort d'un evenement de synchro (chargement) : n'affecte jamais le resultat de
+// l'action en cours si elle echoue.
+function recordSyncEvent(kind, charId) {
+  driveSaveBdd(function (bdd) {
+    bdd._meta = bdd._meta || {};
+    bdd._meta[kind] = { at: new Date().toISOString(), charId: charId, source: 'admin' };
+    return bdd;
+  }).then(function (bdd) {
+    updateSyncMetaDisplay(bdd._meta);
+  }).catch(function () { /* best-effort */ });
+}
+
+// Rafraichissement a la demande (geste utilisateur explicite, pour ne pas etre bloque par le
+// navigateur comme le serait une authentification Google declenchee automatiquement au chargement
+// de la page).
+function refreshSyncMeta() {
+  showToast('Actualisation...');
+  driveLoadBdd().then(function (bdd) {
+    updateSyncMetaDisplay(bdd._meta);
+    showToast('Actualisé', 'success');
+  }).catch(function (err) {
+    showToast(err.message || 'Échec de l\'actualisation', true);
+  });
+}
+
 state = loadState();
 render();
+renderSyncFooter(loadSyncMetaCache());
 </script>
 </body>
 </html>
