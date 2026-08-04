@@ -1775,7 +1775,7 @@
         : 'background:rgba(var(--border-tint),0.06);border:1px solid rgba(var(--border-tint),0.15);color:var(--text-dim);cursor:default;pointer-events:none;';
     }
 
-    var pillLabel = mode === 'tous' ? 'Tous les sorts' : mode === 'favoris' ? 'Favoris' : (mode === 'classe' ? 'Classe' : 'Niveau ' + mode);
+    var pillLabel = mode === 'tous' ? '-' : mode === 'favoris' ? 'Favoris' : (mode === 'classe' ? 'Classe' : 'Niv.' + mode);
 
     var dropdownHtml = '';
     if (ui.grimoireLevelMenuOpen) {
@@ -1798,7 +1798,7 @@
               '">Tous</div>' +
             '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px">' +
               '<div data-action="grimoire-step" data-delta="-1" style="flex:none;width:58px;height:58px;border-radius:13px;display:flex;align-items:center;justify-content:center;user-select:none;' + stepBtnStyle(canPrev) + '">' + iconArrowLeft(27) + '</div>' +
-              '<div data-action="toggle-grimoire-level-menu" style="flex:1;min-width:0;height:58px;padding:0 19px;border-radius:13px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-gold);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer;user-select:none;font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(pillLabel) + '</div>' +
+              '<div data-action="toggle-grimoire-level-menu" style="flex:1;min-width:0;height:58px;padding:0 19px;border-radius:13px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-gold);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer;user-select:none;font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(pillLabel) + '</div>' +
               '<div data-action="grimoire-step" data-delta="1" style="flex:none;width:58px;height:58px;border-radius:13px;display:flex;align-items:center;justify-content:center;user-select:none;transform:scaleX(-1);' + stepBtnStyle(canNext) + '">' + iconArrowLeft(27) + '</div>' +
             '</div>' +
             '<div data-action="grimoire-tab" data-tab="favoris" style="flex:none;width:58px;height:58px;border-radius:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;' +
