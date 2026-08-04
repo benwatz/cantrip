@@ -363,7 +363,6 @@
       abilityScores: makeAbilityScores(),
       savingThrows: makeSavingThrows(),
       skills: makeSkills(),
-      preparedSpells: [],
       favoriteSpells: [],
       gold: 0
     };
@@ -457,8 +456,6 @@
       atk.damageBonus = clamp(Math.round(atk.damageBonus), -99, 99);
       if (typeof atk.damageType !== 'string') atk.damageType = '';
     });
-    if (!Array.isArray(p.preparedSpells)) p.preparedSpells = [];
-    else p.preparedSpells = p.preparedSpells.filter(function (n) { return typeof n === 'string'; });
     if (!Array.isArray(p.favoriteSpells)) p.favoriteSpells = [];
     else p.favoriteSpells = p.favoriteSpells.filter(function (n) { return typeof n === 'string'; });
     if (typeof p.gold !== 'number' || isNaN(p.gold)) p.gold = 0;
@@ -557,7 +554,7 @@
         { name: 'Survie', modifier: 4 },
         { name: 'Tromperie', modifier: 3 }
       ],
-      preparedSpells: [
+      favoriteSpells: [
         'Bouclier de la foi', 'Cérémonie', 'Châtiment calcinant', 'Châtiment courroucé',
         'Châtiment tonitruant', 'Détection de la magie', 'Détection du mal et du bien'
       ]
@@ -787,7 +784,7 @@
 
   // ---- ephemeral UI state (not persisted) ----
   var ui = {
-    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'grimoire-prepare' | 'settings' | 'settings-character' | 'settings-grimoire' | 'settings-load-character' | 'settings-codex'
+    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'settings' | 'settings-character' | 'settings-load-character' | 'settings-codex'
     editingMax: false,
     editingTemp: false,
     editingCombatStat: null, // null | 'ac' | 'initiative' | 'speed' — édition inline des tuiles CA/Initiative/Déplacement sur le Tracker
@@ -795,14 +792,11 @@
     shortRestChecks: { hp: false, spells: false, tempHp: false, classResource: false, counters: false },
     statsSearch: '',
     codexSearch: '',
-    grimoireLevelFilters: null, // { [niveau numérique (0..9) | 'classe']: bool } ; null = pas encore initialisé (équivaut à "tous actifs") — sert renderGrimoireV1()/renderGrimoirePrepare(), pas V2
+    grimoireLevelFilters: null, // { [niveau numérique (0..9) | 'classe']: bool } ; null = pas encore initialisé (équivaut à "tous actifs") — sert renderGrimoireV1(), pas V2
     grimoireSearch: '', // recherche du Grimoire V2 (renderGrimoireV2) — filtre tous niveaux confondus
     grimoireLevelMenuOpen: false, // menu déroulant du sélecteur de niveau (Grimoire V2)
     grimoireTab: 0, // Grimoire V2 uniquement : niveau numérique (0..9), 'classe', 'tous' ou 'favoris'
     grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les filtres de niveau
-    prepareFilters: { action: false, bonus: false, prepared: false, notPrepared: false }, // filtres propres à la page "Préparation de sorts" (Deneor)
-    grimoirePrepareBackView: 'grimoire', // vue vers laquelle revenir depuis "Préparation de sorts"
-    draftPreparedSpells: [], // copie de travail de profile().preparedSpells pendant "grimoire-prepare" ; seul "Valider" la répercute
     settingsLevelError: '',
     settingsCharacterEditing: false, // verrouille/déverrouille Paramétrer le Personnage
     settingsCharacterDraft: null, // copie de travail du profil pendant l'édition ; committée par "Valider"
@@ -980,7 +974,6 @@
   };
 
   // ---- grimoire (Deneor Sentariel — Paladin, Serment des Anciens) ----
-  // alwaysAvailable: sort de serment, jamais dans la liste préparable (voir renderGrimoireSection / renderGrimoire).
   var DENEOR_SPELLBOOK = {
     sections: [
       {
@@ -988,8 +981,8 @@
         levelTag: "Niv. 1",
         level: 1,
         spells: [
-          { name: "Frappe piégeuse", type: "BONUS", range: "Personnel · Conc. 1 min", alwaysAvailable: true, desc: "Prochaine attaque au corps à corps touchée : des lianes épineuses entravent la cible (JS Force, avantage si taille G+) et infligent 1d6 perforant au début de chacun de ses tours.", note: "Sort de serment, toujours préparé. Combine bien avec Châtiment divin sur la même attaque." },
-          { name: "Communication avec les animaux", type: "RITUEL", range: "Personnel · 10 min", alwaysAvailable: true, desc: "Comprend et communique verbalement avec les bêtes pendant la durée ; leurs réponses restent limitées par leur intelligence.", note: "Utile pour interroger un témoin animal ou calmer une monture affolée. Lançable en rituel, sans consommer d'emplacement." },
+          { name: "Frappe piégeuse", type: "BONUS", range: "Personnel · Conc. 1 min", desc: "Prochaine attaque au corps à corps touchée : des lianes épineuses entravent la cible (JS Force, avantage si taille G+) et infligent 1d6 perforant au début de chacun de ses tours.", note: "Sort de serment, toujours préparé. Combine bien avec Châtiment divin sur la même attaque." },
+          { name: "Communication avec les animaux", type: "RITUEL", range: "Personnel · 10 min", desc: "Comprend et communique verbalement avec les bêtes pendant la durée ; leurs réponses restent limitées par leur intelligence.", note: "Utile pour interroger un témoin animal ou calmer une monture affolée. Lançable en rituel, sans consommer d'emplacement." },
           { name: "Bénédiction", type: "ACTION", range: "9m · Conc. 1 min", desc: "Jusqu'à 3 créatures ajoutent 1d4 à leurs jets d'attaque et de sauvegarde pendant la durée.", note: "Excellent avant un affrontement anticipé, peu coûteux en concentration." },
           { name: "Bouclier de la foi", type: "BONUS", range: "18m · Conc. 10 min", desc: "+2 CA pour une créature choisie à portée.", note: "Bon réflexe de protection rapide sur un allié ou soi-même en début de combat." },
           { name: "Cérémonie", type: "RITUEL", range: "Contact (cible à 3m)", desc: "Rite religieux au choix : purifie l'eau, restaure un alignement changé, accorde +1d4 aux caractéristiques ou sauvegardes pendant 24h, protège un cadavre de la non-mort, ou +2 CA à des époux pendant 7 jours.", note: "Sort ritualisé et narratif : utile hors combat pour marquer des moments importants ou préparer une bénédiction longue durée." },
@@ -1013,8 +1006,8 @@
         levelTag: "Niv. 2",
         level: 2,
         spells: [
-          { name: "Rayon de lune", type: "ACTION", range: "36m · Conc. 1 min", alwaysAvailable: true, desc: "Colonne de lumière 1,5m de rayon, 12m de haut. JS Constitution ou 2d10 radiants (demi si réussi) à l'entrée ou au début du tour dans la zone. Déplaçable de 18m par action.", note: "Très efficace contre les métamorphes, qui subissent le JS avec désavantage et sont forcés de reprendre forme." },
-          { name: "Foulée brumeuse", type: "BONUS", range: "Personnel", alwaysAvailable: true, desc: "Téléportation instantanée jusqu'à 9m vers un espace libre visible.", note: "Réserver comme dégagement d'urgence ou pour refermer la distance sur un lanceur de sorts ennemi." },
+          { name: "Rayon de lune", type: "ACTION", range: "36m · Conc. 1 min", desc: "Colonne de lumière 1,5m de rayon, 12m de haut. JS Constitution ou 2d10 radiants (demi si réussi) à l'entrée ou au début du tour dans la zone. Déplaçable de 18m par action.", note: "Très efficace contre les métamorphes, qui subissent le JS avec désavantage et sont forcés de reprendre forme." },
+          { name: "Foulée brumeuse", type: "BONUS", range: "Personnel", desc: "Téléportation instantanée jusqu'à 9m vers un espace libre visible.", note: "Réserver comme dégagement d'urgence ou pour refermer la distance sur un lanceur de sorts ennemi." },
           { name: "Aide", type: "ACTION", range: "9m", desc: "Jusqu'à 3 créatures gagnent +5 PV max et actuels pendant 8 heures.", note: "À lancer avant un combat difficile plutôt qu'en réaction à des dégâts déjà subis." },
           { name: "Appel de destrier", type: "10 MIN", range: "9m", desc: "Invoque un esprit sous forme de monture liée (cheval, poney, chameau, élan ou molosse) de type céleste, fée ou fiélon.", note: "Le lien permet une télépathie à 1,5km et de partager certains sorts lancés sur le cavalier. Réinvocable à volonté hors combat." },
           { name: "Arme magique", type: "BONUS", range: "Contact · Conc. 1h", desc: "Une arme non magique touchée devient +1 aux jets d'attaque et de dégâts. +2 avec un emplacement de niveau 4+, +3 avec un emplacement de niveau 6+.", note: "Surtout utile contre les créatures résistantes aux armes non magiques." },
@@ -1073,22 +1066,8 @@
     return null;
   }
 
-  // Noms des sorts réellement préparables (hors sorts de serment "alwaysAvailable" et hors
-  // capacités de la section "classe", jamais préparables). Sert à assainir `preparedSpells` :
-  // un nom qui n'y figure plus (sort de serment, sort renommé/retiré du grimoire...) ne pourra
-  // plus jamais apparaître ni être décoché dans la page Préparation, mais restait compté dans le
-  // badge — un profil corrompu de cette façon affichait un compteur > 0 sans aucun sort visible.
-  function preparableSpellNames() {
-    var names = [];
-    characterGrimoire('deneor').sections.forEach(function (s) {
-      if (s.level === 'classe') return;
-      s.spells.forEach(function (spell) { if (!spell.alwaysAvailable) names.push(spell.name); });
-    });
-    return names;
-  }
-
   // Styles de badge par préfixe de type de sort — source unique aussi pour les chips de filtre
-  // (GRIMOIRE_FILTERS / PREPARE_FILTERS ci-dessous), qui reprenaient ces mêmes couleurs en dur.
+  // (GRIMOIRE_FILTERS ci-dessous), qui reprenaient ces mêmes couleurs en dur.
   var SPELL_TYPE_STYLES = {
     ACTION: 'background:rgba(125,211,252,0.16);border:1px solid rgba(125,211,252,0.45);color:var(--accent-blue-text);',
     BONUS: 'background:rgba(34,197,94,0.16);border:1px solid rgba(34,197,94,0.45);color:var(--accent-green-text);',
@@ -1179,10 +1158,8 @@
     switch (ui.view) {
       case 'stats': return renderStats();
       case 'grimoire': return renderGrimoireV2();
-      case 'grimoire-prepare': return renderGrimoirePrepare();
       case 'settings': return renderSettings();
       case 'settings-character': return renderSettingsCharacter();
-      case 'settings-grimoire': return renderSettingsGrimoire();
       case 'settings-load-character': return renderSettingsLoadCharacter();
       case 'settings-codex': return renderSettingsCodex();
       default: return renderTracker();
@@ -1569,43 +1546,15 @@
     return activeFilters.some(function (f) { return t.indexOf(f.prefix) === 0; });
   }
 
-  // Filtres de la page "Préparation de sorts" (Deneor) : pas de Réaction (aucun sort de ce type
-  // dans sa liste) ni de Classe (les capacités de classe/serment ne sont pas préparables, elles
-  // n'apparaissent que dans le Grimoire normal). "Préparé"/"Non préparé" sont des filtres à part :
-  // ils ne testent pas le type du sort mais sa présence (ou non) dans le brouillon en cours
-  // (ui.draftPreparedSpells). Comme les autres, ils sont cumulables et se togglent au clic
-  // (data-action="toggle-prepare-filter"), combinés en OR avec le reste.
-  var PREPARE_FILTERS = [
-    { key: 'action', label: 'Action', prefix: 'ACTION', style: SPELL_TYPE_STYLES.ACTION },
-    { key: 'bonus', label: 'Bonus', prefix: 'BONUS', style: SPELL_TYPE_STYLES.BONUS },
-    { key: 'prepared', label: 'Préparé', style: 'background:rgba(34,197,94,0.28);border:1px solid #22c55e;color:var(--accent-green-text);' },
-    { key: 'notPrepared', label: 'Non préparé', style: 'background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.6);color:var(--accent-red-text);' }
-  ];
-
-  function spellMatchesPrepareTypeFilters(spell) {
-    var activeFilters = PREPARE_FILTERS.filter(function (f) { return ui.prepareFilters[f.key]; });
-    if (!activeFilters.length) return true;
-    var t = spell.type.toUpperCase();
-    return activeFilters.some(function (f) {
-      if (f.key === 'prepared') return ui.draftPreparedSpells.indexOf(spell.name) !== -1;
-      if (f.key === 'notPrepared') return ui.draftPreparedSpells.indexOf(spell.name) === -1;
-      return t.indexOf(f.prefix) === 0;
-    });
-  }
-
-  function renderGrimoireSection(section, spells, prepareMode) {
+  function renderGrimoireSection(section, spells) {
     var rowsHtml = spells.map(function (spell, i) {
-      var prepared = !!prepareMode && ui.draftPreparedSpells.indexOf(spell.name) !== -1;
-      // En mode Préparation, le tap (dé)prépare le sort ; sinon (Grimoire normal), il ouvre la
-      // popup de détail (renderSpellDetailModal()) pour lire le nom/la description sans troncature.
-      var rowAction = prepareMode
-        ? 'data-action="toggle-prepared-spell" data-name="' + escapeHtml(spell.name) + '"'
-        : 'data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '"';
+      // Le tap sur une ligne ouvre la popup de détail (renderSpellDetailModal()) pour lire le nom/
+      // la description sans troncature.
+      var rowAction = 'data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '"';
       return '<div ' + rowAction +
-        ' style="padding:11px 14px;background:' + (prepared ? 'rgba(34,197,94,0.14)' : (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)')) + ';border-bottom:1px solid rgba(var(--border-tint),0.14);cursor:pointer;' + (prepared ? 'border-left:3px solid #22c55e;' : '') + '">' +
+        ' style="padding:11px 14px;background:' + (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)') + ';border-bottom:1px solid rgba(var(--border-tint),0.14);cursor:pointer">' +
         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
           '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
-            (prepared ? '<div style="flex:none;width:16px;height:16px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center">' + ICON_CHECK + '</div>' : '') +
             '<div style="font-size:14px;font-weight:700;color:var(--text-main);font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(spell.name) + '</div>' +
           '</div>' +
           '<div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
@@ -1692,10 +1641,10 @@
 
   // Onglets de niveau devenus des filtres combinables (juillet 2026, remplace la sélection
   // exclusive à un seul niveau) : chaque chip togglé indépendamment se combine en OR avec les
-  // autres (même principe que GRIMOIRE_FILTERS/PREPARE_FILTERS). "Tous" (data-action=
+  // autres (même principe que GRIMOIRE_FILTERS). "Tous" (data-action=
   // "toggle-grimoire-level-all") n'est pas un niveau parmi d'autres mais un raccourci maître :
   // actif seulement quand tous les niveaux le sont, il les active/désactive tous d'un coup.
-  function grimoireTabsHtml(tabs, dotLevels) {
+  function grimoireTabsHtml(tabs) {
     var allActive = tabs.every(function (t) { return !!ui.grimoireLevelFilters[t]; });
     var allChipHtml = '<div data-action="toggle-grimoire-level-all" style="flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
       (allActive
@@ -1704,13 +1653,11 @@
       '">Tous</div>';
     var tabsHtml = tabs.map(function (tab) {
       var active = !!ui.grimoireLevelFilters[tab];
-      var hasPrepared = !!(dotLevels && dotLevels[tab]);
-      return '<div data-action="toggle-grimoire-level" data-tab="' + tab + '" style="position:relative;flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+      return '<div data-action="toggle-grimoire-level" data-tab="' + tab + '" style="flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
         (active
           ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);'
           : 'background:transparent;border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
         '">' + escapeHtml(grimoireTabLabel(tab)) +
-        (hasPrepared ? '<div style="position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:#22c55e;border:1px solid var(--bg-card)"></div>' : '') +
         '</div>';
     }).join('');
     return allChipHtml + tabsHtml;
@@ -1733,14 +1680,10 @@
         '">' + escapeHtml(f.label) + '</div>';
     }).join('');
 
-    var isDeneor = state.activeCharacterId === 'deneor';
     var activeLevels = tabs.filter(function (t) { return ui.grimoireLevelFilters[t]; });
     var matchingSections = activeSpellbook().sections.filter(function (s) { return ui.grimoireLevelFilters[s.level]; });
     var sectionsWithSpells = matchingSections.map(function (s) {
-      var visibleSpells = (isDeneor && s.level !== 'classe')
-        ? s.spells.filter(function (spell) { return spell.alwaysAvailable || profile().preparedSpells.indexOf(spell.name) !== -1; })
-        : s.spells;
-      return { section: s, spells: visibleSpells.filter(spellMatchesGrimoireFilters) };
+      return { section: s, spells: s.spells.filter(spellMatchesGrimoireFilters) };
     }).filter(function (x) { return x.spells.length > 0; });
     var totalSpellsAtLevel = matchingSections.reduce(function (sum, s) { return sum + s.spells.length; }, 0);
 
@@ -1762,10 +1705,7 @@
           '<div style="display:flex;gap:6px">' + filterChipsHtml + '</div>' +
         '</div>' +
         '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
-        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
-        (isDeneor
-          ? '<div id="grimoirePrepareFab" data-action="open-grimoire-prepare" data-back="grimoire" style="position:absolute;left:0;right:0;bottom:0;height:48px;border-radius:10px;background:var(--border-strong);color:var(--ink-bright);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);transition:opacity 200ms ease-out" class="font-cinzel">Préparer mes sorts</div>'
-          : '') +
+        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:4px">' + contentHtml + '</div>' +
       '</div>'
     );
   }
@@ -1773,12 +1713,11 @@
   // V2 — recherche pleine largeur (même pattern que #statsSearchInput), sélecteur de niveau à
   // trois zones ( - / "Niveau N" cliquable / + ) plutôt que les filtres de niveau combinables de
   // V1, encadré par deux boutons "Tous" et "Favoris" (étoile), et favoris par sort (étoile par
-  // ligne, persistée dans profile().favoriteSpells, indépendante de preparedSpells). N'utilise pas
-  // ui.grimoireLevelFilters (propre à V1/Préparation) : ui.grimoireTab est un état dédié à V2, qui
+  // ligne, persistée dans profile().favoriteSpells). N'utilise pas
+  // ui.grimoireLevelFilters (propre à V1) : ui.grimoireTab est un état dédié à V2, qui
   // accepte en plus des niveaux réels 'tous'/'favoris' (jamais renvoyés par grimoireTabs(), qui
   // reste la seule source pour le cycle -/+ et le menu déroulant : niveaux réels + 'classe').
   function renderGrimoireV2() {
-    var isDeneor = state.activeCharacterId === 'deneor';
     var levelTabs = grimoireTabs();
     var mode = ui.grimoireTab;
     if (levelTabs.indexOf(mode) === -1 && mode !== 'tous' && mode !== 'favoris') mode = ui.grimoireTab = levelTabs[0];
@@ -1802,9 +1741,7 @@
 
     var baseCount = 0; // sorts visibles avant recherche, pour distinguer les messages "vide"
     var sectionsWithSpells = relevantSections.map(function (s) {
-      var visible = (isDeneor && s.level !== 'classe')
-        ? s.spells.filter(function (spell) { return spell.alwaysAvailable || profile().preparedSpells.indexOf(spell.name) !== -1; })
-        : s.spells;
+      var visible = s.spells;
       if (mode === 'favoris' && !searching) {
         visible = visible.filter(function (spell) { return profile().favoriteSpells.indexOf(spell.name) !== -1; });
       }
@@ -1855,85 +1792,23 @@
       '<div style="display:flex;flex-direction:column;height:100%;gap:10px;position:relative">' +
         '<input id="grimoireSearchInput" type="text" value="' + escapeHtml(ui.grimoireSearch || '') + '" placeholder="Rechercher un sort" style="flex:none;height:48px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:10px;color:var(--text-main);font-size:15px;padding:0 16px;box-sizing:border-box"/>' +
         '<div id="grimoireChromeBlock" style="flex:none;display:flex;flex-direction:column;gap:10px">' +
-          '<div style="display:flex;align-items:center;justify-content:center;gap:6px">' +
-            '<div data-action="grimoire-tab" data-tab="tous" style="flex:none;height:44px;padding:0 14px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer;user-select:none;' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+            '<div data-action="grimoire-tab" data-tab="tous" style="flex:none;height:58px;padding:0 19px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;cursor:pointer;user-select:none;' +
               (mode === 'tous' ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);' : 'background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);') +
               '">Tous</div>' +
-            '<div data-action="grimoire-step" data-delta="-1" style="flex:none;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;user-select:none;' + stepBtnStyle(canPrev) + '">' + iconArrowLeft(20) + '</div>' +
-            '<div data-action="toggle-grimoire-level-menu" style="flex:none;height:44px;padding:0 14px;border-radius:10px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-gold);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;cursor:pointer;user-select:none;font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(pillLabel) + '</div>' +
-            '<div data-action="grimoire-step" data-delta="1" style="flex:none;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;user-select:none;transform:scaleX(-1);' + stepBtnStyle(canNext) + '">' + iconArrowLeft(20) + '</div>' +
-            '<div data-action="grimoire-tab" data-tab="favoris" style="flex:none;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+            '<div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px">' +
+              '<div data-action="grimoire-step" data-delta="-1" style="flex:none;width:58px;height:58px;border-radius:13px;display:flex;align-items:center;justify-content:center;user-select:none;' + stepBtnStyle(canPrev) + '">' + iconArrowLeft(27) + '</div>' +
+              '<div data-action="toggle-grimoire-level-menu" style="flex:1;min-width:0;height:58px;padding:0 19px;border-radius:13px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-gold);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:pointer;user-select:none;font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(pillLabel) + '</div>' +
+              '<div data-action="grimoire-step" data-delta="1" style="flex:none;width:58px;height:58px;border-radius:13px;display:flex;align-items:center;justify-content:center;user-select:none;transform:scaleX(-1);' + stepBtnStyle(canNext) + '">' + iconArrowLeft(27) + '</div>' +
+            '</div>' +
+            '<div data-action="grimoire-tab" data-tab="favoris" style="flex:none;width:58px;height:58px;border-radius:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;' +
               (mode === 'favoris' ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);' : 'background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);') +
-              '">' + iconStar(mode === 'favoris', 20) + '</div>' +
+              '">' + iconStar(mode === 'favoris', 27) + '</div>' +
           '</div>' +
           dropdownHtml +
         '</div>' +
         '<div id="grimoireResetBtn" data-action="reset-grimoire-search" style="position:absolute;top:0;right:0;width:36px;height:36px;border-radius:8px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);opacity:0;pointer-events:none;transition:opacity 150ms ease-out;z-index:5">' + iconClose() + '</div>' +
-        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
-        (isDeneor
-          ? '<div id="grimoirePrepareFab" data-action="open-grimoire-prepare" data-back="grimoire" style="position:absolute;left:0;right:0;bottom:0;height:48px;border-radius:10px;background:var(--border-strong);color:var(--ink-bright);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);transition:opacity 200ms ease-out" class="font-cinzel">Préparer mes sorts</div>'
-          : '') +
-      '</div>'
-    );
-  }
-
-  function renderGrimoirePrepare() {
-    var tabs = grimoireTabs().filter(function (t) { return t !== 'classe'; });
-    ensureGrimoireLevelFilters(tabs);
-    // Pastille verte sur les onglets contenant au moins un sort déjà préparé, pour repérer d'un
-    // coup d'oeil où se trouvent les sorts comptés dans le badge (qui totalise tous les niveaux).
-    var preparedLevels = {};
-    characterGrimoire('deneor').sections.forEach(function (s) {
-      if (s.level === 'classe') return;
-      s.spells.forEach(function (spell) {
-        if (!spell.alwaysAvailable && ui.draftPreparedSpells.indexOf(spell.name) !== -1) preparedLevels[s.level] = true;
-      });
-    });
-    var tabsHtml = grimoireTabsHtml(tabs, preparedLevels);
-
-    var filterChipsHtml = PREPARE_FILTERS.map(function (f) {
-      var active = !!ui.prepareFilters[f.key];
-      return '<div data-action="toggle-prepare-filter" data-filter="' + f.key + '" style="flex:none;height:26px;padding:0 10px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:0.02em;cursor:pointer;user-select:none;' +
-        (active ? f.style : 'background:transparent;border:1px solid rgba(var(--border-tint),0.25);color:var(--text-dim);') +
-        '">' + escapeHtml(f.label) + '</div>';
-    }).join('');
-
-    var activeLevels = tabs.filter(function (t) { return ui.grimoireLevelFilters[t]; });
-    var matchingSections = characterGrimoire('deneor').sections.filter(function (s) { return s.level !== 'classe' && ui.grimoireLevelFilters[s.level]; });
-    var preparableSections = matchingSections.map(function (s) {
-      return { title: s.title, levelTag: s.levelTag, level: s.level, spells: s.spells.filter(function (spell) { return !spell.alwaysAvailable; }) };
-    });
-    var sectionsWithSpells = preparableSections.map(function (s) {
-      return { section: s, spells: s.spells.filter(spellMatchesPrepareTypeFilters) };
-    }).filter(function (x) { return x.spells.length > 0; });
-    var totalSpellsAtLevel = preparableSections.reduce(function (sum, s) { return sum + s.spells.length; }, 0);
-
-    var contentHtml;
-    if (!activeLevels.length) {
-      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Sélectionnez au moins un niveau.</div>';
-    } else if (sectionsWithSpells.length) {
-      contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSection(x.section, x.spells, true); }).join('<div style="height:14px"></div>');
-    } else if (totalSpellsAtLevel === 0) {
-      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort à ce niveau.</div>';
-    } else {
-      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort ne correspond aux filtres sélectionnés.</div>';
-    }
-
-    var preparedCount = ui.draftPreparedSpells.length;
-
-    return (
-      '<div style="display:flex;flex-direction:column;height:100%;gap:12px">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none">' +
-          '<div style="display:flex;align-items:center;gap:10px">' +
-            navBackButtonHtml(ui.grimoirePrepareBackView || 'grimoire') +
-            '<div style="font-size:19px;font-weight:700;letter-spacing:0.3px" class="font-cinzel">Préparation de sorts</div>' +
-          '</div>' +
-          '<div style="flex:none;min-width:38px;height:38px;background:var(--border-strong);color:var(--ink-bright);font-weight:700;font-size:19px;padding:0 10px;border-radius:19px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,0.3)">' + preparedCount + '</div>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:none">' + filterChipsHtml + '</div>' +
-        '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
         '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:4px">' + contentHtml + '</div>' +
-        '<div data-action="confirm-grimoire-prepare" style="flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Valider</div>' +
       '</div>'
     );
   }
@@ -1947,8 +1822,7 @@
 
   function renderSettings() {
     var menuItems = [
-      { view: 'settings-character', label: 'Paramétrer le Personnage' },
-      { view: 'settings-grimoire', label: 'Paramétrer le Grimoire' },
+      { view: 'settings-character', label: 'Paramétrer les statistiques' },
       { view: 'settings-load-character', label: 'Gestion des personnages' },
       { view: 'settings-codex', label: 'Codex' }
     ];
@@ -2178,7 +2052,7 @@
 
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
-        renderSettingsHeader('Paramétrer le Personnage') +
+        renderSettingsHeader('Paramétrer les statistiques') +
         '<div data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px">' +
           blocks.join(SETTINGS_SEPARATOR) +
         '</div>' +
@@ -2186,28 +2060,6 @@
       '</div>'
     );
   }
-
-  function renderSettingsGrimoire() {
-    var isDeneor = state.activeCharacterId === 'deneor';
-    var bodyHtml = isDeneor
-      ? ('<div style="font-size:12px;color:var(--text-dim);line-height:1.4">Le Grimoire de Deneor Sentariel utilise un système de préparation de sorts : les sorts de serment, les capacités de classe et les passifs sont toujours disponibles, le reste doit être préparé.</div>' +
-        '<div style="display:flex;flex-direction:column;gap:6px;flex:none">' +
-          '<label style="font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em">Sorts préparés</label>' +
-          '<div data-action="open-grimoire-prepare" data-back="settings-grimoire" style="height:46px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);color:var(--text-main);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Préparer mes sorts</div>' +
-        '</div>')
-      : ('<div style="font-size:12px;color:var(--text-dim);line-height:1.4">Le contenu du Grimoire de Calix Noctavel est actuellement fixe et non éditable.</div>' +
-        '<div style="display:flex;flex-direction:column;gap:6px;flex:none">' +
-          '<label style="font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em">Mode de lancer de sorts</label>' +
-          '<div style="padding:14px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);border-radius:12px;color:var(--text-dim);font-size:13px;text-align:center">À venir (sorts connus / préparés)</div>' +
-        '</div>');
-    return (
-      '<div data-scroll-root style="display:flex;flex-direction:column;height:100%;gap:14px;overflow-y:auto">' +
-        renderSettingsHeader('Paramétrer le Grimoire') +
-        bodyHtml +
-      '</div>'
-    );
-  }
-
 
   function renderSettingsLoadCharacter() {
     var animDirection = ui.characterCarouselAnimDirection;
@@ -2375,9 +2227,6 @@
         '</div>' +
         rowsHtml +
         '<div data-action="confirm-rest" style="height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:4px;' + disabledStyle + '" class="font-cinzel">Se reposer</div>' +
-        (state.activeCharacterId === 'deneor'
-          ? '<div data-action="confirm-rest-and-prepare" style="height:40px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;' + disabledStyle + '">Se reposer et préparer des sorts</div>'
-          : '') +
       '</div>' +
     '</div>';
   }
@@ -2753,20 +2602,6 @@
       });
     });
 
-    var grimoireSwipe = document.getElementById('grimoireSwipe');
-    if (grimoireSwipe) {
-      var grimoirePrepareFab = document.getElementById('grimoirePrepareFab');
-      if (grimoirePrepareFab) {
-        var updateFabVisibility = function () {
-          var atTop = grimoireSwipe.scrollTop <= 4;
-          grimoirePrepareFab.style.opacity = atTop ? '1' : '0';
-          grimoirePrepareFab.style.pointerEvents = atTop ? 'auto' : 'none';
-        };
-        updateFabVisibility();
-        grimoireSwipe.addEventListener('scroll', updateFabVisibility, { passive: true });
-      }
-    }
-
     var characterCarouselSwipe = document.getElementById('characterCarouselSwipe');
     if (characterCarouselSwipe) {
       // Glissé façon "carte à jouer" : la carte suit le pointeur (souris ou tactile) en direct
@@ -3069,7 +2904,7 @@
         break;
       }
       case 'toggle-grimoire-level-all': {
-        var allTabs = ui.view === 'grimoire-prepare' ? grimoireTabs().filter(function (t) { return t !== 'classe'; }) : grimoireTabs();
+        var allTabs = grimoireTabs();
         var allActive = allTabs.every(function (t) { return !!ui.grimoireLevelFilters[t]; });
         allTabs.forEach(function (t) { ui.grimoireLevelFilters[t] = !allActive; });
         render();
@@ -3236,43 +3071,6 @@
       case 'confirm-rest':
         confirmRest();
         break;
-      case 'confirm-rest-and-prepare':
-        confirmRestAndPrepare();
-        break;
-
-      case 'open-grimoire-prepare': {
-        var prepareBack = e.currentTarget.getAttribute('data-back');
-        ui.grimoirePrepareBackView = prepareBack || 'grimoire';
-        var validPrepareNames = preparableSpellNames();
-        var cleanedPreparedSpells = profile().preparedSpells.filter(function (n) { return validPrepareNames.indexOf(n) !== -1; });
-        if (cleanedPreparedSpells.length !== profile().preparedSpells.length) {
-          profile().preparedSpells = cleanedPreparedSpells;
-          saveState();
-        }
-        ui.draftPreparedSpells = profile().preparedSpells.slice();
-        ui.view = 'grimoire-prepare';
-        render();
-        break;
-      }
-      case 'toggle-prepared-spell': {
-        var spellName = e.currentTarget.getAttribute('data-name');
-        var draftIdx = ui.draftPreparedSpells.indexOf(spellName);
-        if (draftIdx === -1) ui.draftPreparedSpells.push(spellName); else ui.draftPreparedSpells.splice(draftIdx, 1);
-        render();
-        break;
-      }
-      case 'confirm-grimoire-prepare':
-        profile().preparedSpells = ui.draftPreparedSpells.slice();
-        saveState();
-        ui.view = ui.grimoirePrepareBackView || 'grimoire';
-        render();
-        break;
-      case 'toggle-prepare-filter': {
-        var prepareFilterKey = e.currentTarget.getAttribute('data-filter');
-        ui.prepareFilters[prepareFilterKey] = !ui.prepareFilters[prepareFilterKey];
-        render();
-        break;
-      }
 
       case 'character-carousel-step': {
         var carouselDelta = parseInt(e.currentTarget.getAttribute('data-delta'), 10);
@@ -3586,19 +3384,6 @@
   function confirmRest() {
     applyRestChecks();
     ui.shortRestOpen = false;
-    saveState();
-    showRestToast();
-    render();
-  }
-
-  function confirmRestAndPrepare() {
-    applyRestChecks();
-    ui.shortRestOpen = false;
-    ui.grimoirePrepareBackView = 'tracker';
-    var validPrepareNames = preparableSpellNames();
-    profile().preparedSpells = profile().preparedSpells.filter(function (n) { return validPrepareNames.indexOf(n) !== -1; });
-    ui.draftPreparedSpells = profile().preparedSpells.slice();
-    ui.view = 'grimoire-prepare';
     saveState();
     showRestToast();
     render();
