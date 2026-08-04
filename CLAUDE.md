@@ -91,18 +91,27 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    tronqués en ellipsis CSS si trop longs plutôt que d'être abrégés en JS. Uniquement des armes :
    pas de notion de sort dans ce bloc (choix explicite — voir Décisions de conception).
    **Rangées de badges** (emplacements de sorts par niveau, ressources de classe de type
-   `badges` à partir de 3 emplacements) : chaque rangée est encadrée par un bouton `−` à gauche et
-   un bouton `+` à droite (juillet 2026 ; taille légèrement supérieure aux pastilles de badges —
-   44×44, `border-radius:10px` — pour rester à peine plus gros que les badges de 40px, même
+   `badges`) : chaque badge est une pastille ronde de 40px (`3px` de bordure, doublée depuis sa
+   taille d'origine de 20px en août 2026 pour rester facile à toucher — les emplacements de sorts
+   et les ressources de classe partagent désormais la même taille, quel que soit le nombre
+   d'emplacements, ce qui a supprimé l'ancien cas particulier `dotSize = crTotal < 3 ? 40 : 20`).
+   À partir de 3 emplacements, chaque rangée est encadrée par un bouton `−` à gauche et un bouton
+   `+` à droite (juillet 2026 ; 44×44, `border-radius:10px`, même
    esprit que le gabarit des boutons −/+ des compétences dans Paramétrer le Personnage mais
    agrandi), en `flex:none` de part et d'autre d'un conteneur `.hscroll` centré
-   (`justify-content:center`, `flex:1`) qui contient les badges. Les deux boutons sont donc
+   (`justify-content:safe center`, `flex:1`) qui contient les badges. Les deux boutons sont donc
    toujours à la même position horizontale (bord de la carte) quel que soit le nombre de badges ou
    la largeur du libellé de niveau/ressource au-dessus. Pour les ressources de classe de type
    `badges`, ces boutons ne sont affichés qu'à partir de 3 emplacements (`cr.used.length >= 3` — en
    dessous, le tap direct sur l'unique/les deux badges suffit et les boutons prendraient plus de
    place que la ressource elle-même) ; en dessous de 3, seule la rangée de badges centrée
-   (`justify-content:center`, sans les boutons) est affichée. Consommation/restauration de droite à
+   (`justify-content:safe center`, sans les boutons) est affichée. `safe center` (plutôt qu'un
+   simple `center`) évite un piège CSS classique : dès que les badges à 40px dépassent la largeur
+   disponible (typiquement 3 emplacements ou plus sur un écran étroit), un `justify-content:center`
+   nu centre quand même le contenu qui déborde et rend le premier/dernier badge à moitié coupé et
+   hors d'atteinte du scroll ; `safe center` retombe sur un alignement au début dès qu'il y a
+   débordement, ce qui garde tous les badges pleinement visibles et atteignables (bug corrigé août
+   2026, provoqué par le doublement de taille). Consommation/restauration de droite à
    gauche (juillet 2026, sens inversé une fois après un premier retour utilisateur) : `−`
    (`data-action="spell-slot-dec"` / `"class-badge-dec"`) consomme le badge disponible le plus à
    droite (`used.lastIndexOf(false)`) ; `+` (`data-action="spell-slot-inc"` / `"class-badge-inc"`)
@@ -118,8 +127,11 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    qu'aligné à gauche, pour rester visuellement cohérent avec les rangées de badges.
    Deux marqueurs toggle (`profile.concentration`, `profile.inspiration`, booléens indépendants)
    alignés à droite sur la ligne du nom du personnage, dans l'ordre inspiration puis
-   concentration : point d'inspiration (icône étoile
-   `iconStar(filled)`, se remplit — `fill:currentColor` — quand actif, simple surbrillance ambre,
+   concentration : point d'inspiration (icône dé à 20 faces `iconD20(filled)` — remplace l'icône
+   étoile d'origine en août 2026, plus parlante pour un jeu D&D ; même principe filled/outline que
+   `iconStar` — toujours utilisée par les favoris du Grimoire, voir plus bas — mais avec les lignes
+   de facettes internes qui passent en `var(--bg-nav)` à l'état rempli pour rester visibles sur le
+   fond plein), se remplit — `fill:currentColor` — quand actif, simple surbrillance ambre,
    pas de glow) et concentration (icône smiley aux sourcils froncés `ICON_CONCENTRATION`, glow
    violet animé via la classe `concentration-active` / `@keyframes concentration-pulse`).
    Concentration active déclenche deux effets supplémentaires sur le bloc PV : un liseret violet

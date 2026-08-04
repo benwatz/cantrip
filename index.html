@@ -867,6 +867,20 @@
     var s = size || 22;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
   }
+  // Dé à 20 faces (silhouette hexagonale + facettes internes) pour le marqueur "point
+  // d'inspiration" (remplace l'étoile, plus parlant pour un jeu D&D). Même principe filled/outline
+  // que iconStar/iconBook : les lignes de facettes passent en `var(--bg-nav)` à l'état rempli pour
+  // rester visibles sur le fond plein plutôt que de se fondre dans `currentColor`.
+  function iconD20(filled, size) {
+    var s = size || 22;
+    var innerStroke = filled ? 'var(--bg-nav)' : 'currentColor';
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">' +
+      '<polygon points="12,2 20.9,7 20.9,17 12,22 3.1,17 3.1,7"/>' +
+      '<g stroke="' + innerStroke + '" stroke-width="1.1" stroke-linecap="round" opacity="' + (filled ? '0.85' : '0.65') + '">' +
+        '<line x1="12" y1="2" x2="12" y2="22"/><line x1="3.1" y1="7" x2="20.9" y2="17"/><line x1="20.9" y1="7" x2="3.1" y2="17"/>' +
+      '</g>' +
+    '</svg>';
+  }
   function iconTracker(filled) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-10-9.3C.5 8 2 4.5 5.6 4c2-.3 3.7.7 4.9 2.3C11.7 4.7 13.4 3.7 15.4 4 19 4.5 20.5 8 19 11.7 16.5 16.4 12 21 12 21z"/></svg>';
   }
@@ -1313,10 +1327,10 @@
         var canInc = availableCount < total;
         var dots = l.used.map(function (used, i) {
           var filled = !used;
-          return '<div data-action="toggle-spell" data-level="' + l.level + '" data-index="' + i + '" style="flex:none;width:20px;height:20px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
+          return '<div data-action="toggle-spell" data-level="' + l.level + '" data-index="' + i + '" style="flex:none;width:40px;height:40px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
             (filled
-              ? 'background:var(--text-gold);border:2px solid var(--text-gold)'
-              : 'background:transparent;border:2px solid rgba(var(--border-tint),0.35)') +
+              ? 'background:var(--text-gold);border:3px solid var(--text-gold)'
+              : 'background:transparent;border:3px solid rgba(var(--border-tint),0.35)') +
             '"></div>';
         }).join('');
         var slotBtn = function (action, disabled, symbol) {
@@ -1325,7 +1339,7 @@
         return '<div style="display:flex;align-items:center;gap:8px">' +
           '<div style="flex:none;width:56px;font-size:11px;font-weight:600;color:var(--text-label);white-space:nowrap">Niveau ' + l.level + '</div>' +
           slotBtn('spell-slot-dec', !canDec, '&minus;') +
-          '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding:2px 0">' + dots + '</div>' +
+          '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:safe center;padding:2px 0">' + dots + '</div>' +
           slotBtn('spell-slot-inc', !canInc, '+') +
           '<div style="flex:none;width:34px;text-align:right;font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums">' + availableCount + '/' + total + '</div>' +
           '</div>';
@@ -1357,16 +1371,12 @@
       var crAvailableCount = cr.used.filter(function (used) { return !used; }).length;
       var crCanDec = crAvailableCount > 0;
       var crCanInc = crAvailableCount < crTotal;
-      // A 1 ou 2 emplacements, il n'y a pas de boutons -/+ (voir plus bas) : la pastille est le
-      // seul point de contact, donc on la double de taille pour rester facile à toucher.
-      var dotSize = crTotal < 3 ? 40 : 20;
-      var dotBorderWidth = crTotal < 3 ? 3 : 2;
       var cbadges = cr.used.map(function (used, i) {
         var filled = !used;
-        return '<div data-action="toggle-class" data-id="' + cr.id + '" data-index="' + i + '" style="flex:none;width:' + dotSize + 'px;height:' + dotSize + 'px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
+        return '<div data-action="toggle-class" data-id="' + cr.id + '" data-index="' + i + '" style="flex:none;width:40px;height:40px;border-radius:50%;cursor:pointer;box-sizing:border-box;' +
           (filled
-            ? 'background:var(--text-gold);border:' + dotBorderWidth + 'px solid var(--text-gold)'
-            : 'background:transparent;border:' + dotBorderWidth + 'px solid rgba(var(--border-tint),0.35)') +
+            ? 'background:var(--text-gold);border:3px solid var(--text-gold)'
+            : 'background:transparent;border:3px solid rgba(var(--border-tint),0.35)') +
           '"></div>';
       }).join('');
       var classSlotBtn = function (action, disabled, symbol) {
@@ -1378,10 +1388,10 @@
       var badgesRowHtml = cr.used.length >= 3
         ? '<div style="display:flex;align-items:center;gap:8px">' +
             classSlotBtn('class-badge-dec', !crCanDec, '&minus;') +
-            '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:center;padding:2px 0">' + cbadges + '</div>' +
+            '<div class="hscroll" style="flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;justify-content:safe center;padding:2px 0">' + cbadges + '</div>' +
             classSlotBtn('class-badge-inc', !crCanInc, '+') +
           '</div>'
-        : '<div class="hscroll" style="display:flex;gap:8px;overflow-x:auto;justify-content:center;padding:2px 0">' + cbadges + '</div>';
+        : '<div class="hscroll" style="display:flex;gap:8px;overflow-x:auto;justify-content:safe center;padding:2px 0">' + cbadges + '</div>';
       return '<div style="display:flex;flex-direction:column;gap:6px">' +
         '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em;text-align:center">' + escapeHtml(cr.label || 'Ressource') + '</div>' +
         badgesRowHtml +
@@ -1422,7 +1432,7 @@
             '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="font-cinzel">' + escapeHtml(p.characterName) + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:10px;flex:none">' +
-            '<div data-action="toggle-inspiration" title="Point d\'inspiration" style="flex:none;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:' + (p.inspiration ? 'var(--accent-gold-badge-text)' : 'var(--text-dim)') + ';background:' + (p.inspiration ? 'rgba(234,179,8,0.18)' : 'transparent') + ';border:1px solid ' + (p.inspiration ? 'rgba(234,179,8,0.6)' : 'rgba(var(--border-tint),0.25)') + '">' + iconStar(p.inspiration) + '</div>' +
+            '<div data-action="toggle-inspiration" title="Point d\'inspiration" style="flex:none;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:' + (p.inspiration ? 'var(--accent-gold-badge-text)' : 'var(--text-dim)') + ';background:' + (p.inspiration ? 'rgba(234,179,8,0.18)' : 'transparent') + ';border:1px solid ' + (p.inspiration ? 'rgba(234,179,8,0.6)' : 'rgba(var(--border-tint),0.25)') + '">' + iconD20(p.inspiration) + '</div>' +
             '<div data-action="toggle-concentration" class="' + (p.concentration ? 'concentration-active' : '') + '" title="Concentration" style="flex:none;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:' + (p.concentration ? 'var(--accent-purple-solid)' : 'var(--text-dim)') + ';background:' + (p.concentration ? 'rgba(167,139,250,0.18)' : 'transparent') + ';border:1px solid ' + (p.concentration ? 'rgba(167,139,250,0.6)' : 'rgba(var(--border-tint),0.25)') + '">' + ICON_CONCENTRATION + '</div>' +
           '</div>' +
         '</div>' +
