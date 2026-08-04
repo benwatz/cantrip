@@ -1765,10 +1765,13 @@
       contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort à ce niveau.</div>';
     }
 
-    var curIdx = levelTabs.indexOf(mode);
-    var inLevelMode = curIdx !== -1;
-    var canPrev = inLevelMode && curIdx > 0;
-    var canNext = inLevelMode && curIdx < levelTabs.length - 1;
+    // "Tous" et "Favoris" bornent la chaîne de navigation -/+ : Tous à gauche de tous les niveaux
+    // (flèche droite → premier niveau, ex. 0 ou 1 selon si les sorts mineurs existent pour ce
+    // personnage), Favoris à droite de tout (flèche gauche → dernier onglet, "Classe" en général).
+    var fullChain = ['tous'].concat(levelTabs).concat(['favoris']);
+    var curIdx = fullChain.indexOf(mode);
+    var canPrev = curIdx > 0;
+    var canNext = curIdx !== -1 && curIdx < fullChain.length - 1;
     function stepBtnStyle(enabled) {
       return enabled
         ? 'background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);cursor:pointer;'
@@ -1781,11 +1784,11 @@
     if (ui.grimoireLevelMenuOpen) {
       var cellsHtml = levelTabs.map(function (t) {
         var active = t === mode;
-        return '<div data-action="grimoire-tab" data-tab="' + t + '" style="' + (t === 'classe' ? 'grid-column:1/-1;' : '') + 'height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+        return '<div data-action="grimoire-tab" data-tab="' + t + '" style="' + (t === 'classe' ? 'grid-column:1/-1;' : '') + 'height:46px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;cursor:pointer;user-select:none;' +
           (active ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);' : 'background:var(--bg-card-alt);border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
           '">' + escapeHtml(grimoireTabLabel(t)) + '</div>';
       }).join('');
-      dropdownHtml = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:10px">' + cellsHtml + '</div>';
+      dropdownHtml = '<div style="margin-top:8px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:14px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:12px">' + cellsHtml + '</div>';
     }
 
     return (
@@ -2924,13 +2927,13 @@
         break;
       }
       case 'grimoire-step': {
-        var v2LevelTabs = grimoireTabs();
-        var v2Idx = v2LevelTabs.indexOf(ui.grimoireTab);
-        if (v2Idx === -1) break; // 'tous'/'favoris' ne font pas partie du cycle -/+
+        var v2FullChain = ['tous'].concat(grimoireTabs()).concat(['favoris']);
+        var v2Idx = v2FullChain.indexOf(ui.grimoireTab);
+        if (v2Idx === -1) break;
         var v2Delta = parseInt(e.currentTarget.getAttribute('data-delta'), 10);
-        var v2NewIdx = clamp(v2Idx + v2Delta, 0, v2LevelTabs.length - 1);
+        var v2NewIdx = clamp(v2Idx + v2Delta, 0, v2FullChain.length - 1);
         if (v2NewIdx === v2Idx) break;
-        ui.grimoireTab = v2LevelTabs[v2NewIdx];
+        ui.grimoireTab = v2FullChain[v2NewIdx];
         render();
         break;
       }
