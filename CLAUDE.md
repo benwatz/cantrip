@@ -91,10 +91,11 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    tronqués en ellipsis CSS si trop longs plutôt que d'être abrégés en JS. Uniquement des armes :
    pas de notion de sort dans ce bloc (choix explicite — voir Décisions de conception).
    **Rangées de badges** (emplacements de sorts par niveau, ressources de classe de type
-   `badges`) : chaque badge est une pastille ronde de 40px (`3px` de bordure, doublée depuis sa
-   taille d'origine de 20px en août 2026 pour rester facile à toucher — les emplacements de sorts
-   et les ressources de classe partagent désormais la même taille, quel que soit le nombre
-   d'emplacements, ce qui a supprimé l'ancien cas particulier `dotSize = crTotal < 3 ? 40 : 20`).
+   `badges`) : chaque badge est une pastille ronde de 27px (`2px` de bordure ; brièvement doublée à
+   40px/3px en août 2026 pour rester facile à toucher, puis rabaissée de 33% après un premier
+   retour utilisateur — les emplacements de sorts et les ressources de classe partagent désormais
+   la même taille, quel que soit le nombre d'emplacements, ce qui a supprimé l'ancien cas
+   particulier `dotSize = crTotal < 3 ? 40 : 20`).
    À partir de 3 emplacements, chaque rangée est encadrée par un bouton `−` à gauche et un bouton
    `+` à droite (juillet 2026 ; 44×44, `border-radius:10px`, même
    esprit que le gabarit des boutons −/+ des compétences dans Paramétrer le Personnage mais
@@ -197,39 +198,49 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    pas aussi déclencher l'ouverture de la popup, ligne et étoile portant chacune leur propre
    `data-action` donc leur propre listener de clic).
    V2 remplace les filtres de niveau combinables par une barre à 5 zones sous le champ de
-   recherche : un bouton **"Tous"** (à gauche), un bouton **−** puis un **bouton central**
-   affichant le niveau courant (ex. "Niveau 3" ou "Classe") et un bouton **+** (au centre,
+   recherche : un bouton **"Tous"** (à gauche), une **flèche gauche** puis un **bouton central**
+   affichant le niveau courant (ex. "Niveau 3" ou "Classe") et une **flèche droite** (au centre,
    `data-action="grimoire-step" data-delta="-1"/"1"`, sans effet de bord aux extrémités), puis un
-   bouton **étoile "Favoris"** (à droite). Un tap sur le bouton central
+   bouton **étoile "Favoris"** (à droite). Les flèches réutilisent `iconArrowLeft()` — la droite
+   via `transform:scaleX(-1)` sur son conteneur, même technique que les flèches du carrousel
+   "Charger un personnage" — plutôt que des glyphes `−`/`+` (remplacés en août 2026, après un
+   premier retour utilisateur qui les trouvait moins lisibles que de vraies flèches directionnelles
+   sur un sélecteur de niveau). Un tap sur le bouton central
    (`data-action="toggle-grimoire-level-menu"`, état `ui.grimoireLevelMenuOpen`) ouvre une grille
    de sélection directe de tous les niveaux + "Classe" (`grimoireTabs()`, inchangée, toujours la
-   seule source pour le cycle −/+ et cette grille), qui se referme au choix d'une entrée.
-   `ui.grimoireTab` (état dédié à V2, distinct de `ui.grimoireLevelFilters` qui reste propre à
-   V1/Préparation) accepte en plus deux valeurs propres à V2, `'tous'` et `'favoris'` — jamais
-   renvoyées par `grimoireTabs()` — qui affichent tous les niveaux + Classe à la suite ; dans ces
-   deux modes les boutons −/+ sont désactivés (le handler `grimoire-step` ne fait rien si
-   `ui.grimoireTab` n'est pas dans `grimoireTabs()`). Le swipe horizontal a été retiré de
-   `#grimoireSwipe` en même temps que le passage en filtres combinables (voir plus bas) et n'a pas
-   été réintroduit pour V2 : seuls les boutons −/+ et la grille de sélection changent de niveau.
+   seule source pour le cycle −/+ et cette grille), qui se referme au choix d'une entrée — le
+   bouton central n'affiche plus de chevron indicateur (retiré en août 2026, jugé redondant avec le
+   simple fait que le libellé de niveau soit cliquable). `ui.grimoireTab` (état dédié à V2, distinct
+   de `ui.grimoireLevelFilters` qui reste propre à V1/Préparation) accepte en plus deux valeurs
+   propres à V2, `'tous'` et `'favoris'` — jamais renvoyées par `grimoireTabs()` — qui affichent
+   tous les niveaux + Classe à la suite ; dans ces deux modes les flèches sont désactivées (le
+   handler `grimoire-step` ne fait rien si `ui.grimoireTab` n'est pas dans `grimoireTabs()`). Le
+   swipe horizontal a été retiré de `#grimoireSwipe` en même temps que le passage en filtres
+   combinables (voir plus bas) et n'a pas été réintroduit pour V2 : seules les flèches et la grille
+   de sélection changent de niveau.
    Comme en V1, `renderGrimoirePrepare()` recale `ui.grimoireTab`/`ui.grimoireLevelFilters` à sa
    façon — ils sont indépendants, V2 n'a donc rien de spécial à gérer en entrant sur la page
    Préparation.
+   **Pas de filtres par type en V2** — contrairement à V1 (Action/Bonus/Réaction, voir plus bas),
+   V2 n'affiche pas les chips `GRIMOIRE_FILTERS` (retirées en août 2026, jugées redondantes avec la
+   recherche par nom) : `renderGrimoireV2()` n'appelle plus `spellMatchesGrimoireFilters()` et
+   n'expose donc plus aucun moyen de faire varier `ui.grimoireFilters` depuis cette page — l'état
+   reste défini (partagé avec V1) mais figé à ses valeurs par défaut tant que seule V2 est utilisée.
    **Recherche** (`#grimoireSearchInput`, `ui.grimoireSearch`) : même pattern d'interaction que
    `#statsSearchInput` sur la page Personnage — filtre en direct sur le nom du sort (pas la
    description), tri par pertinence (exact, préfixe, contient), présélection du contenu exclue au
    focus (c'est un filtre, pas une valeur à remplacer). Le focus masque `#grimoireChromeBlock`
-   (barre de niveau + chips de filtre, regroupées dans un seul conteneur pour ce besoin) et
-   affiche une croix de réinitialisation (`#grimoireResetBtn`, `data-action=
-   "reset-grimoire-search"`), pilotés directement en JS sans `render()` (même raison qu'ailleurs :
-   un `render()` re-focaliserait l'input, ce qui redéclencherait `focus` en boucle). Un filet de
-   sécurité identique à celui de Personnage existe aussi dans le listener `visualViewport.resize`
-   pour les claviers Android qui se ferment sans déclencher de `blur`. Tant qu'une recherche est
-   active, elle ignore le mode courant (niveau/Tous/Favoris) et affiche les résultats de **tout**
-   le grimoire, groupés par section comme d'habitude (la puce de niveau déjà affichée sur chaque
-   ligne de sort suffit à resituer chaque résultat) ; elle respecte toujours la restriction Deneor
-   (sorts non préparés jamais trouvables) et les filtres de type actifs. Revenir en arrière (croix
-   ou `blur` avec champ vide) réaffiche exactement le mode/niveau qui était sélectionné avant la
-   recherche.
+   (barre de niveau, dans son propre conteneur pour ce besoin) et affiche une croix de
+   réinitialisation (`#grimoireResetBtn`, `data-action="reset-grimoire-search"`), pilotés
+   directement en JS sans `render()` (même raison qu'ailleurs : un `render()` re-focaliserait
+   l'input, ce qui redéclencherait `focus` en boucle). Un filet de sécurité identique à celui de
+   Personnage existe aussi dans le listener `visualViewport.resize` pour les claviers Android qui
+   se ferment sans déclencher de `blur`. Tant qu'une recherche est active, elle ignore le mode
+   courant (niveau/Tous/Favoris) et affiche les résultats de **tout** le grimoire, groupés par
+   section comme d'habitude (la puce de niveau déjà affichée sur chaque ligne de sort suffit à
+   resituer chaque résultat) ; elle respecte toujours la restriction Deneor (sorts non préparés
+   jamais trouvables). Revenir en arrière (croix ou `blur` avec champ vide) réaffiche exactement le
+   mode/niveau qui était sélectionné avant la recherche.
    **Favoris** : étoile cliquable au début de chaque ligne de sort (`data-action=
    "toggle-favorite-spell"`, `renderGrimoireSectionV2()` uniquement), toggle instantané (pas de
    brouillon/validation, contrairement aux sorts préparés) persisté dans `profile().favoriteSpells`
