@@ -364,6 +364,7 @@
       savingThrows: makeSavingThrows(),
       skills: makeSkills(),
       preparedSpells: [],
+      favoriteSpells: [],
       gold: 0
     };
   }
@@ -458,6 +459,8 @@
     });
     if (!Array.isArray(p.preparedSpells)) p.preparedSpells = [];
     else p.preparedSpells = p.preparedSpells.filter(function (n) { return typeof n === 'string'; });
+    if (!Array.isArray(p.favoriteSpells)) p.favoriteSpells = [];
+    else p.favoriteSpells = p.favoriteSpells.filter(function (n) { return typeof n === 'string'; });
     if (typeof p.gold !== 'number' || isNaN(p.gold)) p.gold = 0;
     p.gold = clamp(Math.round(p.gold), 0, 10000);
     return p;
@@ -792,7 +795,10 @@
     shortRestChecks: { hp: false, spells: false, tempHp: false, classResource: false, counters: false },
     statsSearch: '',
     codexSearch: '',
-    grimoireLevelFilters: null, // { [niveau numérique (0..9) | 'classe']: bool } ; null = pas encore initialisé (équivaut à "tous actifs")
+    grimoireLevelFilters: null, // { [niveau numérique (0..9) | 'classe']: bool } ; null = pas encore initialisé (équivaut à "tous actifs") — sert renderGrimoireV1()/renderGrimoirePrepare(), pas V2
+    grimoireSearch: '', // recherche du Grimoire V2 (renderGrimoireV2) — filtre tous niveaux confondus
+    grimoireLevelMenuOpen: false, // menu déroulant du sélecteur de niveau (Grimoire V2)
+    grimoireTab: 0, // Grimoire V2 uniquement : niveau numérique (0..9), 'classe', 'tous' ou 'favoris'
     grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les filtres de niveau
     prepareFilters: { action: false, bonus: false, prepared: false, notPrepared: false }, // filtres propres à la page "Préparation de sorts" (Deneor)
     grimoirePrepareBackView: 'grimoire', // vue vers laquelle revenir depuis "Préparation de sorts"
@@ -857,8 +863,9 @@
   }
   var ICON_CHECK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="var(--ink-bright)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var ICON_CONCENTRATION = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7.5 9.3l2.8 1.7"/><path d="M16.5 9.3l-2.8 1.7"/><circle cx="8.6" cy="13.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="15.4" cy="13.2" r="0.9" fill="currentColor" stroke="none"/><path d="M9 16.8h6"/></svg>';
-  function iconStar(filled) {
-    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+  function iconStar(filled, size) {
+    var s = size || 22;
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
   }
   function iconTracker(filled) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-10-9.3C.5 8 2 4.5 5.6 4c2-.3 3.7.7 4.9 2.3C11.7 4.7 13.4 3.7 15.4 4 19 4.5 20.5 8 19 11.7 16.5 16.4 12 21 12 21z"/></svg>';
@@ -1163,7 +1170,7 @@
   function renderPage() {
     switch (ui.view) {
       case 'stats': return renderStats();
-      case 'grimoire': return renderGrimoire();
+      case 'grimoire': return renderGrimoireV2();
       case 'grimoire-prepare': return renderGrimoirePrepare();
       case 'settings': return renderSettings();
       case 'settings-character': return renderSettingsCharacter();
@@ -1191,7 +1198,7 @@
     document.title = 'Suivi — ' + (profile().characterName || 'Personnage');
     var prevScroller = app.querySelector('[data-scroll-root]');
     var scrollTop = prevScroller ? prevScroller.scrollTop : 0;
-    var focusedSearchId = document.activeElement && (document.activeElement.id === 'statsSearchInput' || document.activeElement.id === 'codexSearchInput')
+    var focusedSearchId = document.activeElement && (document.activeElement.id === 'statsSearchInput' || document.activeElement.id === 'codexSearchInput' || document.activeElement.id === 'grimoireSearchInput')
       ? document.activeElement.id : null;
     app.innerHTML =
       '<div style="display:flex;flex-direction:column;height:100%">' +
@@ -1641,6 +1648,39 @@
     '</div>';
   }
 
+  // Ligne de sort du Grimoire V2 : identique à renderGrimoireSection (V1/Préparation) — même tap
+  // sur la ligne pour ouvrir la popup de détail (data-action="open-spell-detail") — mais avec une
+  // étoile de favori en plus, à gauche du nom. Le clic sur l'étoile stoppe la propagation dans le
+  // handler 'toggle-favorite-spell' pour ne pas aussi ouvrir la popup de détail (les deux éléments
+  // ont chacun leur propre data-action, donc chacun son propre listener de clic).
+  function renderGrimoireSectionV2(section, spells) {
+    var rowsHtml = spells.map(function (spell, i) {
+      var favorited = profile().favoriteSpells.indexOf(spell.name) !== -1;
+      return '<div data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '" style="padding:11px 14px;background:' + (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)') + ';border-bottom:1px solid rgba(var(--border-tint),0.14);cursor:pointer">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
+          '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
+            '<div data-action="toggle-favorite-spell" data-name="' + escapeHtml(spell.name) + '" style="flex:none;width:18px;height:18px;color:' + (favorited ? 'var(--text-gold)' : 'var(--text-dim)') + ';cursor:pointer;display:flex;align-items:center;justify-content:center">' + iconStar(favorited, 16) + '</div>' +
+            '<div style="font-size:14px;font-weight:700;color:var(--text-main);font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(spell.name) + '</div>' +
+          '</div>' +
+          '<div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
+            '<div style="display:flex;align-items:center;gap:5px">' +
+              '<div style="background:rgba(var(--border-tint),0.12);border:1px solid rgba(var(--border-tint),0.32);color:var(--text-chip);padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">' + escapeHtml(section.levelTag) + '</div>' +
+              '<div style="' + spellBadgeStyle(spell.type) + 'padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:0.03em;white-space:nowrap">' + escapeHtml(spell.type) + '</div>' +
+            '</div>' +
+            '<div style="font-size:10px;color:var(--text-muted);white-space:nowrap">' + escapeHtml(spell.range) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size:12.5px;color:var(--text-desc);margin-top:6px;line-height:1.4">' + escapeHtml(spell.desc) + '</div>' +
+        (spell.note ? '<div style="font-size:11px;color:var(--text-note);font-style:italic;margin-top:4px;line-height:1.3">' + escapeHtml(spell.note) + '</div>' : '') +
+      '</div>';
+    }).join('');
+
+    return '<div style="display:flex;flex-direction:column;gap:6px">' +
+      '<div style="font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">' + escapeHtml(section.title) + '</div>' +
+      '<div style="display:flex;flex-direction:column;border-radius:12px;overflow:hidden;border:1px solid rgba(var(--border-tint),0.2)">' + rowsHtml + '</div>' +
+    '</div>';
+  }
+
   // Onglets de niveau devenus des filtres combinables (juillet 2026, remplace la sélection
   // exclusive à un seul niveau) : chaque chip togglé indépendamment se combine en OR avec les
   // autres (même principe que GRIMOIRE_FILTERS/PREPARE_FILTERS). "Tous" (data-action=
@@ -1667,7 +1707,11 @@
     return allChipHtml + tabsHtml;
   }
 
-  function renderGrimoire() {
+  // V1 (filtres de niveau combinables) — conservée intacte mais non appelée depuis cette
+  // réorganisation, remplacée par renderGrimoireV2() ci-dessous (recherche + sélecteur
+  // -/niveau/+/dropdown + favoris). Pour revenir à V1 : dans renderPage(), remplacer l'appel à
+  // renderGrimoireV2() par renderGrimoireV1().
+  function renderGrimoireV1() {
     var tabs = grimoireTabs();
     ensureGrimoireLevelFilters(tabs);
 
@@ -1709,6 +1753,124 @@
           '<div style="display:flex;gap:6px">' + filterChipsHtml + '</div>' +
         '</div>' +
         '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
+        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
+        (isDeneor
+          ? '<div id="grimoirePrepareFab" data-action="open-grimoire-prepare" data-back="grimoire" style="position:absolute;left:0;right:0;bottom:0;height:48px;border-radius:10px;background:var(--border-strong);color:var(--ink-bright);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);transition:opacity 200ms ease-out" class="font-cinzel">Préparer mes sorts</div>'
+          : '') +
+      '</div>'
+    );
+  }
+
+  // V2 — recherche pleine largeur (même pattern que #statsSearchInput), sélecteur de niveau à
+  // trois zones ( - / "Niveau N" cliquable / + ) plutôt que les filtres de niveau combinables de
+  // V1, encadré par deux boutons "Tous" et "Favoris" (étoile), et favoris par sort (étoile par
+  // ligne, persistée dans profile().favoriteSpells, indépendante de preparedSpells). N'utilise pas
+  // ui.grimoireLevelFilters (propre à V1/Préparation) : ui.grimoireTab est un état dédié à V2, qui
+  // accepte en plus des niveaux réels 'tous'/'favoris' (jamais renvoyés par grimoireTabs(), qui
+  // reste la seule source pour le cycle -/+ et le menu déroulant : niveaux réels + 'classe').
+  function renderGrimoireV2() {
+    var isDeneor = state.activeCharacterId === 'deneor';
+    var levelTabs = grimoireTabs();
+    var mode = ui.grimoireTab;
+    if (levelTabs.indexOf(mode) === -1 && mode !== 'tous' && mode !== 'favoris') mode = ui.grimoireTab = levelTabs[0];
+
+    var searchQuery = (ui.grimoireSearch || '').trim();
+    var searching = searchQuery.length > 0;
+    var searchLower = searchQuery.toLowerCase();
+    function spellSearchRank(name) {
+      var n = name.toLowerCase();
+      if (n === searchLower) return 0;
+      if (n.indexOf(searchLower) === 0) return 1;
+      return 2;
+    }
+
+    // En recherche ou en mode "Tous"/"Favoris", toutes les sections sont parcourues (dans l'ordre
+    // du grimoire, croissant puis "classe") plutôt que la seule section du niveau sélectionné.
+    var allSections = activeSpellbook().sections;
+    var relevantSections = (searching || mode === 'tous' || mode === 'favoris')
+      ? allSections
+      : allSections.filter(function (s) { return s.level === mode; });
+
+    var baseCount = 0; // sorts visibles avant filtres de type / recherche, pour distinguer les messages "vide"
+    var sectionsWithSpells = relevantSections.map(function (s) {
+      var visible = (isDeneor && s.level !== 'classe')
+        ? s.spells.filter(function (spell) { return spell.alwaysAvailable || profile().preparedSpells.indexOf(spell.name) !== -1; })
+        : s.spells;
+      if (mode === 'favoris' && !searching) {
+        visible = visible.filter(function (spell) { return profile().favoriteSpells.indexOf(spell.name) !== -1; });
+      }
+      baseCount += visible.length;
+      var filtered = visible.filter(spellMatchesGrimoireFilters);
+      if (searching) {
+        filtered = filtered.filter(function (spell) { return spell.name.toLowerCase().indexOf(searchLower) !== -1; })
+          .sort(function (a, b) { return spellSearchRank(a.name) - spellSearchRank(b.name); });
+      }
+      return { section: s, spells: filtered };
+    }).filter(function (x) { return x.spells.length > 0; });
+
+    var contentHtml;
+    if (sectionsWithSpells.length) {
+      contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSectionV2(x.section, x.spells); }).join('<div style="height:14px"></div>');
+    } else if (searching) {
+      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort ne correspond à « ' + escapeHtml(searchQuery) + ' ».</div>';
+    } else if (mode === 'favoris' && baseCount === 0) {
+      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort en favori. Appuyez sur l’étoile d’un sort pour l’ajouter.</div>';
+    } else if (baseCount === 0) {
+      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort à ce niveau.</div>';
+    } else {
+      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort ne correspond aux filtres sélectionnés.</div>';
+    }
+
+    var curIdx = levelTabs.indexOf(mode);
+    var inLevelMode = curIdx !== -1;
+    var canPrev = inLevelMode && curIdx > 0;
+    var canNext = inLevelMode && curIdx < levelTabs.length - 1;
+    function stepBtnStyle(enabled) {
+      return enabled
+        ? 'background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);cursor:pointer;'
+        : 'background:rgba(var(--border-tint),0.06);border:1px solid rgba(var(--border-tint),0.15);color:var(--text-dim);cursor:default;pointer-events:none;';
+    }
+
+    var pillLabel = mode === 'tous' ? 'Tous les sorts' : mode === 'favoris' ? 'Favoris' : (mode === 'classe' ? 'Classe' : 'Niveau ' + mode);
+
+    var dropdownHtml = '';
+    if (ui.grimoireLevelMenuOpen) {
+      var cellsHtml = levelTabs.map(function (t) {
+        var active = t === mode;
+        return '<div data-action="grimoire-tab" data-tab="' + t + '" style="' + (t === 'classe' ? 'grid-column:1/-1;' : '') + 'height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+          (active ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);' : 'background:var(--bg-card-alt);border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
+          '">' + escapeHtml(grimoireTabLabel(t)) + '</div>';
+      }).join('');
+      dropdownHtml = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:10px">' + cellsHtml + '</div>';
+    }
+
+    var filterChipsHtml = GRIMOIRE_FILTERS.map(function (f) {
+      var active = !!ui.grimoireFilters[f.key];
+      return '<div data-action="toggle-grimoire-filter" data-filter="' + f.key + '" style="flex:none;height:26px;padding:0 10px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:0.02em;cursor:pointer;user-select:none;' +
+        (active ? f.style : 'background:transparent;border:1px solid rgba(var(--border-tint),0.25);color:var(--text-dim);') +
+        '">' + escapeHtml(f.label) + '</div>';
+    }).join('');
+
+    return (
+      '<div style="display:flex;flex-direction:column;height:100%;gap:10px;position:relative">' +
+        '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;flex:none" class="font-cinzel">Grimoire</div>' +
+        '<input id="grimoireSearchInput" type="text" value="' + escapeHtml(ui.grimoireSearch || '') + '" placeholder="Rechercher un sort" style="flex:none;height:48px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:10px;color:var(--text-main);font-size:15px;padding:0 16px;box-sizing:border-box"/>' +
+        '<div id="grimoireChromeBlock" style="flex:none;display:flex;flex-direction:column;gap:10px">' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+            '<div data-action="grimoire-tab" data-tab="tous" style="flex:none;height:34px;padding:0 12px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
+              (mode === 'tous' ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);' : 'background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);') +
+              '">Tous</div>' +
+            '<div data-action="grimoire-step" data-delta="-1" style="flex:none;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;user-select:none;' + stepBtnStyle(canPrev) + '">&minus;</div>' +
+            '<div data-action="toggle-grimoire-level-menu" style="flex:1;min-width:0;height:34px;border-radius:8px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-gold);display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:700;cursor:pointer;user-select:none;font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(pillLabel) + ' <span style="font-size:10px;opacity:0.7">▾</span></div>' +
+            '<div data-action="grimoire-step" data-delta="1" style="flex:none;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;user-select:none;' + stepBtnStyle(canNext) + '">+</div>' +
+            '<div data-action="grimoire-tab" data-tab="favoris" style="flex:none;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+              (mode === 'favoris' ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);' : 'background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.4);color:var(--text-label);') +
+              '">' + iconStar(mode === 'favoris', 16) + '</div>' +
+          '</div>' +
+          dropdownHtml +
+          '<div style="display:flex;gap:6px">' + filterChipsHtml + '</div>' +
+        '</div>' +
+        '<div id="grimoireResetBtn" data-action="reset-grimoire-search" style="position:absolute;top:0;right:0;width:36px;height:36px;border-radius:8px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);opacity:0;pointer-events:none;transition:opacity 150ms ease-out;z-index:5">' + iconClose() + '</div>' +
         '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:' + (isDeneor ? '68px' : '4px') + '">' + contentHtml + '</div>' +
         (isDeneor
           ? '<div id="grimoirePrepareFab" data-action="open-grimoire-prepare" data-back="grimoire" style="position:absolute;left:0;right:0;bottom:0;height:48px;border-radius:10px;background:var(--border-strong);color:var(--ink-bright);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.35);transition:opacity 200ms ease-out" class="font-cinzel">Préparer mes sorts</div>'
@@ -2488,6 +2650,37 @@
       }
     }
 
+    var grimoireSearchInput = document.getElementById('grimoireSearchInput');
+    if (grimoireSearchInput) {
+      if (focusedSearchId === 'grimoireSearchInput') {
+        grimoireSearchInput.focus();
+        var grimoireCaret = grimoireSearchInput.value.length;
+        grimoireSearchInput.setSelectionRange(grimoireCaret, grimoireCaret);
+      }
+      grimoireSearchInput.addEventListener('input', function () {
+        ui.grimoireSearch = grimoireSearchInput.value;
+        render();
+      });
+
+      var grimoireResetBtn = document.getElementById('grimoireResetBtn');
+      var grimoireChromeBlock = document.getElementById('grimoireChromeBlock');
+      if (grimoireResetBtn || grimoireChromeBlock) {
+        // Même principe que updateStatsFocusUI : bascule directe (pas de render()) pour éviter
+        // qu'un render() ne re-focalise l'input et ne redéclenche 'focus' en boucle.
+        var updateGrimoireFocusUI = function () {
+          var focused = document.activeElement === grimoireSearchInput;
+          if (grimoireResetBtn) {
+            grimoireResetBtn.style.opacity = focused ? '1' : '0';
+            grimoireResetBtn.style.pointerEvents = focused ? 'auto' : 'none';
+          }
+          if (grimoireChromeBlock) grimoireChromeBlock.style.display = focused ? 'none' : '';
+        };
+        updateGrimoireFocusUI();
+        grimoireSearchInput.addEventListener('focus', updateGrimoireFocusUI);
+        grimoireSearchInput.addEventListener('blur', updateGrimoireFocusUI);
+      }
+    }
+
     var codexSearchInput = document.getElementById('codexSearchInput');
     if (codexSearchInput) {
       if (focusedSearchId === 'codexSearchInput') {
@@ -2890,6 +3083,42 @@
         render();
         break;
       }
+      case 'grimoire-tab': {
+        var v2TabValue = e.currentTarget.getAttribute('data-tab');
+        ui.grimoireTab = (v2TabValue === 'classe' || v2TabValue === 'tous' || v2TabValue === 'favoris') ? v2TabValue : parseInt(v2TabValue, 10);
+        ui.grimoireLevelMenuOpen = false;
+        render();
+        break;
+      }
+      case 'grimoire-step': {
+        var v2LevelTabs = grimoireTabs();
+        var v2Idx = v2LevelTabs.indexOf(ui.grimoireTab);
+        if (v2Idx === -1) break; // 'tous'/'favoris' ne font pas partie du cycle -/+
+        var v2Delta = parseInt(e.currentTarget.getAttribute('data-delta'), 10);
+        var v2NewIdx = clamp(v2Idx + v2Delta, 0, v2LevelTabs.length - 1);
+        if (v2NewIdx === v2Idx) break;
+        ui.grimoireTab = v2LevelTabs[v2NewIdx];
+        render();
+        break;
+      }
+      case 'toggle-grimoire-level-menu':
+        ui.grimoireLevelMenuOpen = !ui.grimoireLevelMenuOpen;
+        render();
+        break;
+      case 'toggle-favorite-spell': {
+        e.stopPropagation(); // la ligne du sort porte elle aussi un data-action (open-spell-detail)
+        var favSpellName = e.currentTarget.getAttribute('data-name');
+        var favIdx = profile().favoriteSpells.indexOf(favSpellName);
+        if (favIdx === -1) profile().favoriteSpells.push(favSpellName); else profile().favoriteSpells.splice(favIdx, 1);
+        saveState();
+        render();
+        break;
+      }
+      case 'reset-grimoire-search':
+        ui.grimoireSearch = '';
+        if (document.activeElement && document.activeElement.id === 'grimoireSearchInput') document.activeElement.blur();
+        render();
+        break;
       case 'toggle-concentration': {
         profile().concentration = !profile().concentration;
         saveState(); render();
@@ -3091,7 +3320,7 @@
   // présélectionne le contenu de tout champ texte au focus, pour faciliter la saisie directe
   // (la recherche de compétences est exclue : c'est un filtre en direct, pas une valeur à remplacer)
   app.addEventListener('focusin', function (e) {
-    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text' && e.target.id !== 'statsSearchInput' && e.target.id !== 'codexSearchInput') {
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text' && e.target.id !== 'statsSearchInput' && e.target.id !== 'codexSearchInput' && e.target.id !== 'grimoireSearchInput') {
       e.target.select();
     }
   });
@@ -3124,6 +3353,19 @@
           if (statsAbilities) statsAbilities.style.display = 'none';
           if (statsReset) { statsReset.style.opacity = '1'; statsReset.style.pointerEvents = 'auto'; }
           if (statsGold) statsGold.style.visibility = 'hidden';
+        }
+      }
+      // Même filet de sécurité pour la recherche du Grimoire V2 (#grimoireSearchInput) : un
+      // clavier Android fermé sans 'blur' laisserait sinon le sélecteur de niveau masqué.
+      var grimoireChrome = document.getElementById('grimoireChromeBlock');
+      var grimoireReset = document.getElementById('grimoireResetBtn');
+      if (grimoireChrome || grimoireReset) {
+        if (keyboardLikelyClosed) {
+          if (grimoireChrome) grimoireChrome.style.display = '';
+          if (grimoireReset) { grimoireReset.style.opacity = '0'; grimoireReset.style.pointerEvents = 'none'; }
+        } else {
+          if (grimoireChrome) grimoireChrome.style.display = 'none';
+          if (grimoireReset) { grimoireReset.style.opacity = '1'; grimoireReset.style.pointerEvents = 'auto'; }
         }
       }
     };
