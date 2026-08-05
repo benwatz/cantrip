@@ -335,6 +335,10 @@
     return 'cr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   }
 
+  function generateCharacterId() {
+    return 'char_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
   function makeClassResource(label, max, type) {
     var resource = { id: generateId(), label: label || 'Ressource de Classe', max: max || 0, type: type === 'counter' ? 'counter' : 'badges', used: [] };
     if (resource.type === 'counter') resource.current = resource.max;
@@ -580,7 +584,8 @@
       activeProfileIndex: 0,
       profiles: [cloneDeep(characters.calix.savedProfile)],
       activeCharacterId: 'calix',
-      characters: characters
+      characters: characters,
+      characterOrder: CHARACTER_ORDER.slice()
     };
   }
 
@@ -603,9 +608,11 @@
           var c = parsed.characters[id];
           if (!c || typeof c !== 'object') { parsed.characters[id] = defaults[id]; return; }
           c.id = id;
-          // name/subtitle/level/portrait/theme ne sont éditables nulle part dans l'UI : toujours
-          // resynchronisés depuis les valeurs par défaut du code pour que les corrections de texte
-          // (typos, etc.) atteignent aussi les sauvegardes existantes, pas seulement les nouvelles.
+          // name/subtitle/level/portrait/theme ne sont éditables nulle part dans l'UI pour Calix/
+          // Deneor : toujours resynchronisés depuis les valeurs par défaut du code pour que les
+          // corrections de texte (typos, etc.) atteignent aussi les sauvegardes existantes, pas
+          // seulement les nouvelles. Ne s'applique pas aux personnages créés dynamiquement
+          // (ci-dessous) : eux n'ont pas de valeurs par défaut codées en dur à resynchroniser.
           c.name = defaults[id].name;
           c.subtitle = defaults[id].subtitle;
           c.level = defaults[id].level;
@@ -616,8 +623,38 @@
           if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
           else sanitizeGrimoire(c.grimoire);
         });
+        // Personnages créés dynamiquement (CRUD local, août 2026) : mêmes garanties de forme que
+        // Calix/Deneor sur savedProfile/grimoire, mais sans resynchronisation de l'identité — elle
+        // n'existe que dans state, il n'y a pas de "défaut code" vers lequel revenir.
+        Object.keys(parsed.characters).forEach(function (id) {
+          if (CHARACTER_ORDER.indexOf(id) !== -1) return;
+          var c = parsed.characters[id];
+          if (!c || typeof c !== 'object') { delete parsed.characters[id]; return; }
+          c.id = id;
+          if (typeof c.name !== 'string' || !c.name) c.name = 'Nouveau personnage';
+          if (typeof c.subtitle !== 'string') c.subtitle = '';
+          if (typeof c.level !== 'number') c.level = null;
+          if (typeof c.portrait !== 'string' || !c.portrait) c.portrait = null;
+          if (typeof c.theme !== 'string') c.theme = 'calix';
+          if (!c.savedProfile || typeof c.savedProfile !== 'object') c.savedProfile = defaultProfile();
+          sanitizeProfile(c.savedProfile);
+          if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
+          else sanitizeGrimoire(c.grimoire);
+        });
       }
-      if (parsed.activeCharacterId !== 'calix' && parsed.activeCharacterId !== 'deneor') parsed.activeCharacterId = 'calix';
+
+      var knownIds = Object.keys(parsed.characters);
+      if (!Array.isArray(parsed.characterOrder)) {
+        parsed.characterOrder = CHARACTER_ORDER.filter(function (id) { return knownIds.indexOf(id) !== -1; });
+      } else {
+        parsed.characterOrder = parsed.characterOrder.filter(function (id) { return knownIds.indexOf(id) !== -1; });
+      }
+      // Filet de sécurité : tout personnage présent dans state.characters mais absent de l'ordre
+      // (ex. characterOrder corrompu/tronqué) reste accessible plutôt que de disparaître de la nav.
+      knownIds.forEach(function (id) { if (parsed.characterOrder.indexOf(id) === -1) parsed.characterOrder.push(id); });
+      if (!parsed.characterOrder.length) parsed.characterOrder = CHARACTER_ORDER.slice();
+
+      if (parsed.characterOrder.indexOf(parsed.activeCharacterId) === -1) parsed.activeCharacterId = parsed.characterOrder[0];
       return parsed;
     } catch (e) {
       return defaultState();
@@ -824,7 +861,7 @@
     settingsGrimoireDraft: null, // copie de travail de state.characters[activeCharacterId].grimoire pendant l'édition
     settingsGrimoireCollapsed: {}, // { [sectionIndex]: bool } — replié par défaut à false, réinitialisé à chaque entrée en édition
     disableLevelDialog: null, // { level: number } quand la confirmation de désactivation est ouverte
-    characterCarouselIndex: 0, // index dans CHARACTER_ORDER, propre à l'écran "Charger un personnage"
+    characterCarouselIndex: 0, // index dans state.characterOrder, propre à l'écran "Gestion des personnages"
     characterCarouselAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderSettingsLoadCharacter()
     goldModalOpen: false,
     goldModalDraft: 0, // copie de travail de profile().gold pendant la modale ; committée par "Valider"
@@ -838,6 +875,8 @@
     restToast: null, // null | { leaving: bool } — confirmation "Vous êtes reposé(e)." après la modale Repos
     restToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     driveConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Drive est ouverte
+    createCharacterModal: null, // { name: string } quand la modale "Créer un personnage" est ouverte
+    deleteCharacterConfirm: null, // { charId } quand la confirmation de suppression est ouverte (jamais pour calix/deneor)
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
@@ -900,8 +939,9 @@
   function iconTracker(filled) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-10-9.3C.5 8 2 4.5 5.6 4c2-.3 3.7.7 4.9 2.3C11.7 4.7 13.4 3.7 15.4 4 19 4.5 20.5 8 19 11.7 16.5 16.4 12 21 12 21z"/></svg>';
   }
-  function iconCharacter(filled) {
-    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5v-1.2a5.3 5.3 0 015.3-5.3h4.4a5.3 5.3 0 015.3 5.3v1.2"/></svg>';
+  function iconCharacter(filled, size) {
+    var s = size || 20;
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5v-1.2a5.3 5.3 0 015.3-5.3h4.4a5.3 5.3 0 015.3 5.3v1.2"/></svg>';
   }
   function iconBook(filled) {
     if (!filled) {
@@ -1264,6 +1304,12 @@
     if (ui.driveConfirm) {
       app.insertAdjacentHTML('beforeend', renderDriveConfirmModal());
     }
+    if (ui.createCharacterModal) {
+      app.insertAdjacentHTML('beforeend', renderCreateCharacterModal());
+    }
+    if (ui.deleteCharacterConfirm) {
+      app.insertAdjacentHTML('beforeend', renderDeleteCharacterModal());
+    }
     if (ui.concentrationToast) {
       app.insertAdjacentHTML('beforeend', renderConcentrationToast());
     }
@@ -1331,6 +1377,18 @@
         (typeText ? '<div style="font-size:16.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center">' + typeText + '</div>' : '') +
       '</div>' +
     '</div>';
+  }
+
+  // Avatar d'un personnage (Tracker, carrousel "Gestion des personnages") : portrait statique s'il
+  // existe (Calix/Deneor uniquement — les personnages créés dynamiquement n'ont pas de fichier
+  // portrait), sinon une icône générique dans un cercle teinté, pour qu'un personnage tout juste
+  // créé ne laisse pas un espace vide à la place de l'avatar.
+  function renderCharacterAvatar(character, size, extraStyle) {
+    var s = size || 38;
+    if (character && character.portrait) {
+      return '<img src="' + escapeHtml(character.portrait) + '" alt="" draggable="false" style="flex:none;width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.35);' + (extraStyle || '') + '"/>';
+    }
+    return '<div style="flex:none;width:' + s + 'px;height:' + s + 'px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(var(--border-tint),0.16);border:1px solid rgba(var(--border-tint),0.35);color:var(--text-muted);' + (extraStyle || '') + '">' + iconCharacter(false, Math.round(s * 0.5)) + '</div>';
   }
 
   function renderTracker() {
@@ -1466,7 +1524,7 @@
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
           '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">' +
-            (activeCharacter && activeCharacter.portrait ? '<img src="' + escapeHtml(activeCharacter.portrait) + '" alt="" style="flex:none;width:38px;height:38px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.35)"/>' : '') +
+            renderCharacterAvatar(activeCharacter, 38) +
             '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="font-cinzel">' + escapeHtml(p.characterName) + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:10px;flex:none">' +
@@ -2112,19 +2170,21 @@
     var animDirection = ui.characterCarouselAnimDirection;
     ui.characterCarouselAnimDirection = null;
 
-    var idx = clamp(ui.characterCarouselIndex, 0, CHARACTER_ORDER.length - 1);
+    var order = state.characterOrder;
+    var idx = clamp(ui.characterCarouselIndex, 0, order.length - 1);
     ui.characterCarouselIndex = idx;
-    var charId = CHARACTER_ORDER[idx];
+    var charId = order[idx];
     var character = state.characters[charId];
     var isActive = state.activeCharacterId === charId;
+    var isLegacy = CHARACTER_ORDER.indexOf(charId) !== -1;
 
-    var dotsHtml = CHARACTER_ORDER.map(function (id, i) {
+    var dotsHtml = order.map(function (id, i) {
       return '<div style="width:8px;height:8px;border-radius:50%;background:' + (i === idx ? 'var(--text-gold)' : 'rgba(var(--border-tint),0.35)') + '"></div>';
     }).join('');
 
     var cardHtml =
       '<div id="characterCarouselSwipe" data-scroll-root class="' + (animDirection === 'next' ? 'character-anim-next' : animDirection === 'prev' ? 'character-anim-prev' : '') + '" style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;overflow-y:auto;padding:8px 0;touch-action:pan-y;user-select:none">' +
-        '<img src="' + escapeHtml(character.portrait) + '" alt="' + escapeHtml(character.name) + '" draggable="false" style="width:180px;height:180px;object-fit:cover;border-radius:16px;border:1px solid rgba(var(--border-tint),0.3);box-shadow:0 4px 18px rgba(0,0,0,0.25);pointer-events:none"/>' +
+        renderCharacterAvatar(character, 180, 'border-radius:16px;box-shadow:0 4px 18px rgba(0,0,0,0.25);pointer-events:none') +
         '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center">' +
           '<div style="font-size:20px;font-weight:700;letter-spacing:0.3px" class="font-cinzel">' + escapeHtml(character.name) + '</div>' +
           '<div style="font-size:13px;color:var(--text-muted)">' + escapeHtml(character.subtitle) + (typeof character.level === 'number' ? ' · Niveau ' + character.level : '') + '</div>' +
@@ -2136,16 +2196,29 @@
       '<div style="display:flex;align-items:center;justify-content:space-between;flex:none">' +
         '<div data-action="character-carousel-step" data-delta="-1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);' + (idx === 0 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
         '<div style="display:flex;gap:6px">' + dotsHtml + '</div>' +
-        '<div data-action="character-carousel-step" data-delta="1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);transform:scaleX(-1);' + (idx === CHARACTER_ORDER.length - 1 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
+        '<div data-action="character-carousel-step" data-delta="1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);transform:scaleX(-1);' + (idx === order.length - 1 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
       '</div>';
 
     var driveDisabledStyle = ui.driveBusy ? 'opacity:0.5;pointer-events:none;' : 'cursor:pointer;';
     var driveButtonBaseStyle = 'flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;';
+
+    // "Activer ce personnage" : bascule locale instantanée (pas de réseau, pas de confirmation
+    // destructive) — distincte de "Charger ce personnage" (Drive) qui récupère une sauvegarde
+    // distante et écrase la progression locale. Sans ça, un personnage tout juste créé (jamais
+    // synchronisé sur Drive) ne serait jouable nulle part.
+    var activateButtonHtml = !isActive
+      ? '<div data-action="activate-character" data-id="' + charId + '" style="' + driveButtonBaseStyle + 'background:var(--bg-card);color:var(--text-main);cursor:pointer;" class="font-cinzel">Activer ce personnage</div>'
+      : '';
+
     var driveButtonsHtml =
       '<div style="display:flex;flex-direction:column;gap:8px;flex:none">' +
+        activateButtonHtml +
         '<div data-action="drive-load-character" data-id="' + charId + '" style="' + driveButtonBaseStyle + driveDisabledStyle + '" class="font-cinzel">Charger ce personnage</div>' +
         (isActive ?
           '<div data-action="drive-save-character" style="' + driveButtonBaseStyle + driveDisabledStyle + '" class="font-cinzel">Sauvegarder ce personnage</div>'
+          : '') +
+        (!isLegacy ?
+          '<div data-action="open-delete-character" data-id="' + charId + '" style="flex:none;height:48px;border-radius:10px;background:transparent;border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Supprimer ce personnage</div>'
           : '') +
       '</div>';
 
@@ -2153,13 +2226,16 @@
       ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--text-muted)">Synchronisation avec Drive…</div>'
       : (ui.driveError ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--accent-red-text)">' + escapeHtml(ui.driveError) + '</div>' : '');
 
+    var createButtonHtml = '<div data-action="open-create-character" style="flex:none;height:44px;border-radius:10px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">+ Créer un personnage</div>';
+
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
-        renderSettingsHeader('Charger un personnage') +
+        renderSettingsHeader('Gestion des personnages') +
         cardHtml +
         driveButtonsHtml +
         driveStatusHtml +
         navArrowsHtml +
+        createButtonHtml +
       '</div>'
     );
   }
@@ -2308,6 +2384,36 @@
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<div data-action="cancel-drive-confirm" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
           '<div data-action="confirm-drive-action" style="flex:1;height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">' + confirmLabel + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderCreateCharacterModal() {
+    var name = ui.createCharacterModal.name;
+    return '<div id="createCharacterOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+      '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="font-size:17px;font-weight:700;color:var(--text-gold)" class="font-cinzel">Créer un personnage</div>' +
+        '<input id="createCharacterNameInput" type="text" value="' + escapeHtml(name) + '" placeholder="Nom du personnage" maxlength="40" style="height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:10px;color:var(--text-main);font-size:15px;padding:0 12px;box-sizing:border-box"/>' +
+        '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.4">Personnage vierge (fiche à zéro, grimoire vide) ajouté à la liste ci-dessous. Tout se règle ensuite dans Paramètres.</div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<div data-action="cancel-create-character" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-create-character" style="flex:1;height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Créer</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderDeleteCharacterModal() {
+    var charId = ui.deleteCharacterConfirm.charId;
+    var charName = state.characters[charId].name;
+    return '<div id="deleteCharacterOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+      '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="font-size:17px;font-weight:700;color:#ef4444" class="font-cinzel">Supprimer ce personnage</div>' +
+        '<div style="font-size:13px;color:var(--text-desc);line-height:1.4">Ceci supprime définitivement ' + escapeHtml(charName) + ' de cet appareil (fiche, grimoire). Aucune confirmation possible après coup. Continuer ?</div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<div data-action="cancel-delete-character" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-delete-character" style="flex:1;height:44px;border-radius:6px;background:rgba(239,68,68,0.85);border:1px solid rgba(239,68,68,0.4);color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Supprimer</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -2682,6 +2788,16 @@
       });
     });
 
+    var createCharacterNameInput = document.getElementById('createCharacterNameInput');
+    if (createCharacterNameInput) {
+      createCharacterNameInput.focus();
+      createCharacterNameInput.select();
+      createCharacterNameInput.addEventListener('input', function () {
+        ui.createCharacterModal.name = createCharacterNameInput.value;
+      });
+      createCharacterNameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') confirmCreateCharacter(); });
+    }
+
     var goldInput = document.getElementById('goldInput');
     if (goldInput) {
       goldInput.addEventListener('change', function () {
@@ -2722,8 +2838,8 @@
           characterCarouselSwipe.setPointerCapture(e.pointerId);
           characterCarouselSwipe.style.transition = 'none';
         }
-        var idxNow = clamp(ui.characterCarouselIndex, 0, CHARACTER_ORDER.length - 1);
-        var blocked = (dx > 0 && idxNow === 0) || (dx < 0 && idxNow === CHARACTER_ORDER.length - 1);
+        var idxNow = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
+        var blocked = (dx > 0 && idxNow === 0) || (dx < 0 && idxNow === state.characterOrder.length - 1);
         var followDx = blocked ? dx * 0.35 : dx;
         charDrag.dx = followDx;
         var rotate = clamp(followDx / 18, -8, 8);
@@ -2738,8 +2854,8 @@
         charDrag = null;
         if (!wasDragging) return;
 
-        var idxNow = clamp(ui.characterCarouselIndex, 0, CHARACTER_ORDER.length - 1);
-        var canPrev = idxNow > 0, canNext = idxNow < CHARACTER_ORDER.length - 1;
+        var idxNow = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
+        var canPrev = idxNow > 0, canNext = idxNow < state.characterOrder.length - 1;
         var threshold = 90;
         var commitDelta = 0;
         if (dx <= -threshold && canNext) commitDelta = 1;
@@ -2763,8 +2879,20 @@
     }
   }
 
+  function confirmCreateCharacter() {
+    if (!ui.createCharacterModal) return;
+    var newCharName = (ui.createCharacterModal.name || '').trim() || 'Nouveau personnage';
+    var newCharId = generateCharacterId();
+    state.characters[newCharId] = makeCharacter(newCharId, newCharName, '', null, null, 'calix');
+    state.characterOrder.push(newCharId);
+    ui.characterCarouselIndex = state.characterOrder.length - 1;
+    ui.createCharacterModal = null;
+    saveState();
+    render();
+  }
+
   function characterCarouselStep(delta) {
-    var newIdx = clamp(ui.characterCarouselIndex + delta, 0, CHARACTER_ORDER.length - 1);
+    var newIdx = clamp(ui.characterCarouselIndex + delta, 0, state.characterOrder.length - 1);
     if (newIdx === ui.characterCarouselIndex) return;
     ui.characterCarouselAnimDirection = delta > 0 ? 'next' : 'prev';
     ui.characterCarouselIndex = newIdx;
@@ -3290,6 +3418,66 @@
         break;
       }
 
+      // Bascule locale instantanée du personnage actif (voir commentaire sur activateButtonHtml
+      // dans renderSettingsLoadCharacter()) — aucune confirmation nécessaire : chaque mutation de
+      // jeu est déjà persistée au fil de l'eau (saveState() immédiat), il n'y a donc rien à perdre
+      // en changeant de personnage actif.
+      case 'activate-character': {
+        var activateId = e.currentTarget.getAttribute('data-id');
+        var activateChar = state.characters[activateId];
+        if (!activateChar) break;
+        state.activeCharacterId = activateId;
+        state.profiles[state.activeProfileIndex] = cloneDeep(activateChar.savedProfile);
+        applyTheme();
+        saveState();
+        ui.view = 'tracker';
+        render();
+        break;
+      }
+
+      case 'open-create-character':
+        ui.createCharacterModal = { name: '' };
+        render();
+        break;
+      case 'cancel-create-character':
+        ui.createCharacterModal = null;
+        render();
+        break;
+      case 'confirm-create-character':
+        confirmCreateCharacter();
+        break;
+
+      case 'open-delete-character': {
+        var openDeleteId = e.currentTarget.getAttribute('data-id');
+        // Filet de sécurité : Calix/Deneor n'ont pas de bouton de suppression dans le rendu, mais
+        // on protège aussi l'action elle-même si jamais elle était déclenchée autrement.
+        if (CHARACTER_ORDER.indexOf(openDeleteId) !== -1) break;
+        ui.deleteCharacterConfirm = { charId: openDeleteId };
+        render();
+        break;
+      }
+      case 'cancel-delete-character':
+        ui.deleteCharacterConfirm = null;
+        render();
+        break;
+      case 'confirm-delete-character': {
+        var deleteId = ui.deleteCharacterConfirm ? ui.deleteCharacterConfirm.charId : null;
+        ui.deleteCharacterConfirm = null;
+        if (!deleteId || CHARACTER_ORDER.indexOf(deleteId) !== -1 || !state.characters[deleteId]) { render(); break; }
+        delete state.characters[deleteId];
+        var deleteIdx = state.characterOrder.indexOf(deleteId);
+        if (deleteIdx !== -1) state.characterOrder.splice(deleteIdx, 1);
+        if (state.activeCharacterId === deleteId) {
+          state.activeCharacterId = state.characterOrder.indexOf('calix') !== -1 ? 'calix' : state.characterOrder[0];
+          state.profiles[state.activeProfileIndex] = cloneDeep(state.characters[state.activeCharacterId].savedProfile);
+          applyTheme();
+        }
+        ui.characterCarouselIndex = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
+        saveState();
+        render();
+        break;
+      }
+
       default: break;
     }
   }
@@ -3452,13 +3640,16 @@
     ui.driveBusy = true; ui.driveError = null; render();
     var charId = state.activeCharacterId;
     var driveSaveProfile = cloneDeep(profile());
-    // Le grimoire n'est pas éditable depuis l'app : on réécrit uniquement le profil, en
-    // conservant tel quel le grimoire déjà présent dans bdd.json (posé par l'admin) plutôt
-    // que de l'écraser avec rien.
+    // Le grimoire local (state.characters[charId].grimoire, éditable depuis "Gérer le Grimoire"
+    // depuis août 2026) prime sur celui déjà présent dans bdd.json : sinon, éditer son grimoire en
+    // jeu puis "Sauvegarder ce personnage" écraserait silencieusement cette édition locale avec la
+    // version distante plus ancienne. On ne retombe sur le grimoire Drive existant que si ce
+    // personnage n'a encore jamais été édité localement (grimoire local absent).
+    var driveSaveGrimoire = state.characters[charId].grimoire;
     driveSaveBdd(function (bdd) {
       var existingEntry = (bdd[charId] && typeof bdd[charId] === 'object') ? bdd[charId] : {};
-      var existingGrimoire = (existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : (state.characters[charId].grimoire || null);
-      bdd[charId] = { profile: driveSaveProfile, grimoire: existingGrimoire };
+      var existingGrimoire = (existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : null;
+      bdd[charId] = { profile: driveSaveProfile, grimoire: driveSaveGrimoire || existingGrimoire };
       return bdd;
     }).then(function () {
       state.characters[charId].savedProfile = cloneDeep(driveSaveProfile);

@@ -395,15 +395,23 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
      portrait agrandi (`ui.codexPreview`, `data-action="open-codex-preview"`), même principe
      d'animation enter/leave que la popup de détail de sort du Grimoire.
 
-## Personnages (Calix / Deneor)
+## Personnages (Calix / Deneor + personnages créés dynamiquement)
 
-Système à **deux emplacements de personnage fixes** (pas de CRUD générique, pas d'ajout/suppression
-de personnage) : `state.characters` est un objet `{ calix: {...}, deneor: {...} }`, chaque entrée
-`{ id, name, subtitle, level, portrait, theme, savedProfile }` où `savedProfile` est un instantané
-complet d'un profil (même forme que `defaultProfile()`) et `theme` (`'calix'` | `'deneor'`) est le
-thème visuel associé à ce personnage (voir section Thèmes (Calix / Deneor) plus bas).
-`state.activeCharacterId` (`'calix'` | `'deneor'`) indique lequel des deux est actuellement
-**chargé**. `CHARACTER_ORDER = ['calix', 'deneor']` fixe l'ordre d'affichage.
+`state.characters` est un objet `{ [id]: {...} }`, chaque entrée `{ id, name, subtitle, level,
+portrait, theme, savedProfile, grimoire }` où `savedProfile` est un instantané complet d'un profil
+(même forme que `defaultProfile()`) et `theme` (`'calix'` | `'deneor'`) est le thème visuel associé
+à ce personnage (voir section Thèmes (Calix / Deneor) plus bas). `state.activeCharacterId` indique
+lequel est actuellement **chargé**. `state.characterOrder` (tableau d'ids, persisté, ajouté en août
+2026) fixe l'ordre d'affichage dans le carrousel — c'est lui qui pilote toute la navigation
+(`character-carousel-step`, glissé, pastilles), **pas** `CHARACTER_ORDER`.
+
+`CHARACTER_ORDER = ['calix', 'deneor']` reste dans le code mais a changé de rôle : ce n'est plus
+l'ordre d'affichage (remplacé par `state.characterOrder`), c'est désormais la liste des **deux
+personnages historiques protégés** — ceux dont l'identité (`name`/`subtitle`/`level`/`portrait`/
+`theme`) reste codée en dur et resynchronisée à chaque chargement (voir `loadState()` plus bas), et
+les seuls qui n'affichent jamais de bouton de suppression dans "Gestion des personnages". Un
+personnage dont l'id n'est pas dans `CHARACTER_ORDER` est un **personnage créé dynamiquement** :
+son identité n'existe que dans `state`, sans défaut code vers lequel revenir.
 
 Le profil réellement affiché/édité dans toute l'app reste `state.profiles[state.activeProfileIndex]`
 (inchangé, lu via `profile()`) : c'est une **copie de travail**, distincte des instantanés
@@ -411,29 +419,47 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
 `cloneDeep()`, un round-trip JSON) pour permettre un aller-retour explicite :
 
 - **Gestion des personnages** (`renderSettingsLoadCharacter()`, `view: 'settings-load-character'`,
-  deuxième bouton du menu Paramètres — le header de la page garde le titre "Charger un
-  personnage") — carrousel plein écran (un personnage affiché à la fois, portrait + nom +
-  sous-titre + niveau si défini, les deux personnages ont un niveau depuis juillet 2026) avec
-  navigation par flèches
-  (`data-action="character-carousel-step"`) ou glissé façon "carte à jouer" sur
-  `#characterCarouselSwipe`, implémenté via Pointer Events (souris **et** tactile, pas seulement
-  tactile) dans `bindEvents()` : la carte suit le curseur/doigt 1:1 pendant le drag (rotation +
-  fondu proportionnels à la distance), avec de la résistance si on dépasse le premier/dernier
-  personnage. Au relâché, au-delà d'un seuil de 90px la carte part en vol vers le bord (transition
-  de 360ms) puis `characterCarouselStep()` s'exécute et la carte suivante entre avec l'animation
-  CSS `character-anim-next`/`-prev` (650ms, plus lente que celle du Grimoire à 420ms, pour un effet
-  de feuilletage posé) ; en dessous du seuil, la carte revient se recaler avec la même transition
-  de 360ms. Un badge "Personnage chargé" s'affiche sur la carte si `state.activeCharacterId`
-  correspond au personnage affiché.
-  Sous la carte, dans cet ordre : le bouton **Charger ce personnage** (`data-action=
-  "drive-load-character"`, toujours actif) puis, uniquement si le personnage affiché est déjà
-  actif (`isActive`), **Sauvegarder ce personnage** (`data-action="drive-save-character"`) — puis
-  la rangée flèches/pastilles du carrousel. Les flèches gauche/droite
-  (`data-action="character-carousel-step"`) sont volontairement à la même taille que les boutons
-  −/+ du bloc PV du Tracker (80×76px, icône 36px, via `iconArrowLeft(size)`) plutôt que la taille
-  généraliste 36×36 des autres boutons de navigation (`navBackButtonHtml()`), pour rester faciles
-  à toucher (juillet 2026).
-  Les deux boutons passent par `bdd.json` sur Google Drive (mêmes fonctions `driveLoadBdd()`/
+  troisième bouton du menu Paramètres — le header de la page a été renommé "Gestion des
+  personnages" en août 2026, aligné sur le libellé du menu, depuis que la page fait bien plus que
+  "charger") — carrousel plein écran (un personnage affiché à la fois, portrait + nom +
+  sous-titre + niveau si défini) avec navigation par flèches (`data-action=
+  "character-carousel-step"`) ou glissé façon "carte à jouer" sur `#characterCarouselSwipe`,
+  implémenté via Pointer Events (souris **et** tactile, pas seulement tactile) dans
+  `bindEvents()` : la carte suit le curseur/doigt 1:1 pendant le drag (rotation + fondu
+  proportionnels à la distance), avec de la résistance si on dépasse le premier/dernier
+  personnage de `state.characterOrder`. Au relâché, au-delà d'un seuil de 90px la carte part en
+  vol vers le bord (transition de 360ms) puis `characterCarouselStep()` s'exécute et la carte
+  suivante entre avec l'animation CSS `character-anim-next`/`-prev` (650ms, plus lente que celle
+  du Grimoire à 420ms, pour un effet de feuilletage posé) ; en dessous du seuil, la carte revient
+  se recaler avec la même transition de 360ms. Un badge "Personnage chargé" s'affiche sur la carte
+  si `state.activeCharacterId` correspond au personnage affiché. Le portrait passe par
+  `renderCharacterAvatar(character, 180, …)` (voir plus bas) : les personnages créés dynamiquement
+  n'ont pas de fichier portrait, donc pas de coin vide à la place.
+  Sous la carte, dans cet ordre : **Activer ce personnage** (`data-action="activate-character"`,
+  local, ajouté en août 2026, affiché uniquement si le personnage affiché n'est pas déjà actif) —
+  bascule locale instantanée (`state.activeCharacterId`, `state.profiles[state.activeProfileIndex]
+  = cloneDeep(character.savedProfile)`, `applyTheme()`, `saveState()`), sans confirmation ni
+  réseau puisque chaque mutation de jeu est déjà persistée au fil de l'eau (rien à perdre en
+  changeant de personnage actif) — c'est la seule façon de jouer un personnage tout juste créé
+  (jamais synchronisé sur Drive, donc rien à "Charger") ; puis **Charger ce personnage**
+  (`data-action="drive-load-character"`, Drive, toujours actif) ; puis, uniquement si le
+  personnage affiché est déjà actif (`isActive`), **Sauvegarder ce personnage** (`data-action=
+  "drive-save-character"`, Drive) ; puis, uniquement si le personnage affiché n'est **pas** l'un
+  des deux historiques (`CHARACTER_ORDER.indexOf(charId) === -1`), **Supprimer ce personnage**
+  (`data-action="open-delete-character"`, rouge, ajouté en août 2026) — puis la rangée
+  flèches/pastilles du carrousel, puis **+ Créer un personnage** (`data-action=
+  "open-create-character"`, dashed, toujours visible en bas de page, indépendant du personnage
+  actuellement affiché dans le carrousel).
+  "Activer" (local) et "Charger"/"Sauvegarder" (Drive) sont volontairement deux mécanismes
+  distincts : activer ne fait que basculer quel personnage est actif *sur cet appareil*, charger/
+  sauvegarder synchronise avec `bdd.json` sur Drive pour partager entre appareils/tables — les
+  personnages créés dynamiquement ne participent à ce second mécanisme que si quelqu'un les
+  sauvegarde explicitement sur Drive (rien d'automatique).
+  Les flèches gauche/droite (`data-action="character-carousel-step"`) sont volontairement à la
+  même taille que les boutons −/+ du bloc PV du Tracker (80×76px, icône 36px, via
+  `iconArrowLeft(size)`) plutôt que la taille généraliste 36×36 des autres boutons de navigation
+  (`navBackButtonHtml()`), pour rester faciles à toucher (juillet 2026).
+  Les boutons Drive passent par `bdd.json` sur Google Drive (mêmes fonctions `driveLoadBdd()`/
   `driveSaveBdd()` que dans `cantrip-admin.html`, voir section Outil admin plus bas) plutôt que par
   une simple copie locale de `character.savedProfile` — un tap ouvre d'abord une modale de
   confirmation (`renderDriveConfirmModal()`, état `ui.driveConfirm = { action: 'load'|'save',
@@ -445,14 +471,53 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
   un toast de confirmation (`showDriveToast()`/`ui.driveToast`) ; en cas d'échec, `ui.driveError`
   s'affiche sous les boutons. `character.savedProfile` de chaque personnage reste donc modifiable
   depuis l'app elle-même via cette synchro Drive (contrairement aux valeurs par défaut codées en
-  dur, voir section Outil admin plus bas).
-  Le Grimoire affiché dépend de `state.activeCharacterId` (`activeSpellbook()`, voir section
-  Grimoire plus haut) : charger Deneor bascule sur `DENEOR_SPELLBOOK`, indépendant du contenu de
-  Calix.
+  dur, voir section Outil admin plus bas). `performDriveSave()` écrit désormais en priorité le
+  grimoire **local** (`state.characters[charId].grimoire`, éditable en jeu depuis août 2026, voir
+  section Grimoire) plutôt que celui déjà présent dans `bdd.json` — avant ce correctif (bug
+  introduit par l'ajout de l'éditeur de Grimoire, corrigé dans la foulée), "Sauvegarder ce
+  personnage" écrasait silencieusement une édition de Grimoire faite en jeu par l'ancienne version
+  distante sur Drive ; le grimoire Drive existant ne sert plus de repli que pour un personnage dont
+  le grimoire n'a encore jamais été édité localement.
+  Le Grimoire affiché dépend de `state.activeCharacterId` (`activeSpellbook()`/`characterGrimoire()`,
+  voir section Grimoire plus haut).
+  **Créer un personnage** (`renderCreateCharacterModal()`, `ui.createCharacterModal = { name }`) —
+  petite modale à un seul champ (nom, présélectionné/focalisé à l'ouverture). "Créer"
+  (`confirmCreateCharacter()`, appelée à la fois par le clic et par Entrée dans le champ) génère un
+  id via `generateCharacterId()` (préfixe `char_`, distinct de `generateId()`/`cr_` utilisé pour
+  les ressources de classe et attaques, pour rester lisible dans un export JSON), crée le
+  personnage via `makeCharacter(id, name, '', null, null, 'calix')` — pas de sous-titre, pas de
+  niveau, pas de portrait (`renderCharacterAvatar()` affiche alors une icône générique dans un
+  cercle teinté plutôt qu'un `<img>`), thème `'calix'` (qui est déjà le thème "neutre" : `:root`
+  sans attribut `data-theme`, aucun `[data-theme="calix"]` dédié n'existe dans le CSS) — puis
+  l'ajoute à `state.characters`/`state.characterOrder` et positionne le carrousel dessus
+  (`ui.characterCarouselIndex`). Ne l'active **pas** automatiquement : il faut ensuite taper
+  "Activer ce personnage" comme pour n'importe quel autre personnage non actif.
+  **Supprimer un personnage** (`renderDeleteCharacterModal()`, `ui.deleteCharacterConfirm =
+  { charId }`) — confirmation avant suppression définitive, protégée à deux niveaux contre
+  Calix/Deneor (pas de bouton affiché, et `onAction()` ignore l'action même si déclenchée
+  autrement). Si le personnage supprimé était actif, `activeCharacterId` retombe sur `'calix'`
+  (ou, cas limite impossible en pratique puisque Calix n'est jamais supprimable, sur le premier
+  id restant de `characterOrder`) et son profil est rechargé.
+
+`renderCharacterAvatar(character, size, extraStyle)` (helper partagé Tracker + carrousel, ajouté en
+août 2026) : `<img>` circulaire si `character.portrait` existe, sinon un cercle teinté avec
+`iconCharacter(false, size * 0.5)` — `iconCharacter()` accepte désormais un `size` optionnel (comme
+`iconChevronRight`/`iconArrowLeft`) pour rester lisible aussi bien à 38px (Tracker) qu'à 180px
+(carrousel, où `extraStyle` bascule le cercle en carré arrondi `border-radius:16px` — même gabarit
+que l'ancien `<img>` dédié qu'il remplace).
 
 `loadState()` migre automatiquement toute sauvegarde antérieure à ce système (`parsed.characters`
 absent) : le profil unique existant devient l'instantané de Calix (aucune perte de données) et
 Deneor démarre sur un `defaultProfile()` vierge ; `activeCharacterId` est alors mis à `'calix'`.
+Pour les personnages créés dynamiquement (id absent de `CHARACTER_ORDER`), `loadState()`
+garantit la forme de `savedProfile`/`grimoire` (mêmes `sanitizeProfile()`/`sanitizeGrimoire()` que
+pour Calix/Deneor) sans jamais toucher à `name`/`subtitle`/`level`/`portrait`/`theme` (pas de
+défaut code à resynchroniser). `state.characterOrder` est reconstruit si absent/invalide
+(sauvegarde antérieure à août 2026) à partir de `CHARACTER_ORDER` puis de tout id supplémentaire
+trouvé dans `state.characters` ; tout id de `state.characters` qui manquerait à l'ordre (ordre
+corrompu/tronqué) est ajouté en fin de liste plutôt que de disparaître silencieusement de la
+navigation. `activeCharacterId` retombe sur `characterOrder[0]` s'il ne pointe plus vers un
+personnage existant.
 
 ## Décisions de conception (à respecter, divergent parfois du cahier des charges)
 
@@ -603,8 +668,14 @@ toute nouvelle machine doit utiliser le nouveau nom ci-dessus.
 
 ## Reste à faire / pistes non traitées
 
-- Personnages : système actuellement limité à deux emplacements fixes (Calix/Deneor), pas de CRUD
-  générique (ajout/suppression d'un personnage) — voir section Personnages plus haut.
+- Personnages : le CRUD local (créer/activer/supprimer, août 2026) fonctionne mais reste
+  100% `localStorage` — pas de compte joueur, pas de partage entre appareils/tables pour un
+  personnage créé dynamiquement (seuls Calix/Deneor bénéficient de la synchro Drive `bdd.json`,
+  et seulement si on l'y ajoute explicitement) — voir section Personnages plus haut. Un vrai
+  partage à plusieurs tables demande un backend multi-utilisateur (ex. Firestore), pas encore fait.
+- Personnages créés dynamiquement : pas de renommage après création, pas d'édition de
+  sous-titre/niveau/portrait dans l'UI (contrairement à Calix/Deneor, ces champs n'ont aucun
+  formulaire dédié pour l'instant).
 - Génération d'un `.apk` installable : voie recommandée — passer l'URL GitHub Pages dans
   PWABuilder.com pour générer un APK signé sans installer Android Studio.
 
