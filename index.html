@@ -792,6 +792,7 @@
     grimoireSearch: '', // recherche du Grimoire (renderGrimoire) — filtre tous niveaux confondus
     grimoireLevelMenuOpen: false, // menu déroulant du sélecteur de niveau
     grimoireTab: 0, // niveau numérique (0..9), 'classe', 'tous' ou 'favoris'
+    grimoireTabBeforeFavoris: 'tous', // dernier onglet non-favoris sélectionné ; réappuyer sur l'étoile depuis "Favoris" y revient
     settingsLevelError: '',
     settingsCharacterEditing: false, // verrouille/déverrouille Paramétrer le Personnage
     settingsCharacterDraft: null, // copie de travail du profil pendant l'édition ; committée par "Valider"
@@ -2770,7 +2771,15 @@
       }
       case 'grimoire-tab': {
         var v2TabValue = e.currentTarget.getAttribute('data-tab');
-        ui.grimoireTab = (v2TabValue === 'classe' || v2TabValue === 'tous' || v2TabValue === 'favoris') ? v2TabValue : parseInt(v2TabValue, 10);
+        var v2NewTab = (v2TabValue === 'classe' || v2TabValue === 'tous' || v2TabValue === 'favoris') ? v2TabValue : parseInt(v2TabValue, 10);
+        // Réappuyer sur l'étoile "Favoris" alors qu'on y est déjà revient au dernier onglet
+        // non-favoris sélectionné, plutôt que de rester sans effet.
+        if (v2NewTab === 'favoris' && ui.grimoireTab === 'favoris') {
+          v2NewTab = ui.grimoireTabBeforeFavoris;
+        } else if (v2NewTab !== 'favoris') {
+          ui.grimoireTabBeforeFavoris = v2NewTab;
+        }
+        ui.grimoireTab = v2NewTab;
         ui.grimoireLevelMenuOpen = false;
         render();
         break;
@@ -2782,7 +2791,9 @@
         var v2Delta = parseInt(e.currentTarget.getAttribute('data-delta'), 10);
         var v2NewIdx = clamp(v2Idx + v2Delta, 0, v2FullChain.length - 1);
         if (v2NewIdx === v2Idx) break;
-        ui.grimoireTab = v2FullChain[v2NewIdx];
+        var v2StepNewTab = v2FullChain[v2NewIdx];
+        if (v2StepNewTab !== 'favoris') ui.grimoireTabBeforeFavoris = v2StepNewTab;
+        ui.grimoireTab = v2StepNewTab;
         render();
         break;
       }
