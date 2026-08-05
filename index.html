@@ -614,6 +614,7 @@
           if (!c.savedProfile || typeof c.savedProfile !== 'object') c.savedProfile = defaults[id].savedProfile;
           else sanitizeProfile(c.savedProfile);
           if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
+          else sanitizeGrimoire(c.grimoire);
         });
       }
       if (parsed.activeCharacterId !== 'calix' && parsed.activeCharacterId !== 'deneor') parsed.activeCharacterId = 'calix';
@@ -804,7 +805,7 @@
 
   // ---- ephemeral UI state (not persisted) ----
   var ui = {
-    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'settings' | 'settings-character' | 'settings-load-character' | 'settings-codex'
+    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'settings' | 'settings-character' | 'settings-load-character' | 'settings-codex' | 'settings-grimoire'
     editingMax: false,
     editingTemp: false,
     editingCombatStat: null, // null | 'ac' | 'initiative' | 'speed' — édition inline des tuiles CA/Initiative/Déplacement sur le Tracker
@@ -819,6 +820,9 @@
     settingsLevelError: '',
     settingsCharacterEditing: false, // verrouille/déverrouille Paramétrer le Personnage
     settingsCharacterDraft: null, // copie de travail du profil pendant l'édition ; committée par "Valider"
+    settingsGrimoireEditing: false, // verrouille/déverrouille Gérer le Grimoire
+    settingsGrimoireDraft: null, // copie de travail de state.characters[activeCharacterId].grimoire pendant l'édition
+    settingsGrimoireCollapsed: {}, // { [sectionIndex]: bool } — replié par défaut à false, réinitialisé à chaque entrée en édition
     disableLevelDialog: null, // { level: number } quand la confirmation de désactivation est ouverte
     characterCarouselIndex: 0, // index dans CHARACTER_ORDER, propre à l'écran "Charger un personnage"
     characterCarouselAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderSettingsLoadCharacter()
@@ -847,6 +851,10 @@
   // Cible des mutations dans "Paramétrer le Personnage" : le profil réel si verrouillé (ne devrait
   // pas arriver, les champs sont désactivés), sinon le brouillon en cours d'édition.
   function settingsCharacterProfile() { return ui.settingsCharacterEditing ? ui.settingsCharacterDraft : profile(); }
+
+  // Cible des mutations dans "Gérer le Grimoire" : le brouillon en cours d'édition, sinon le
+  // grimoire effectif du personnage actif (lecture seule hors édition).
+  function settingsGrimoireData() { return ui.settingsGrimoireEditing ? ui.settingsGrimoireDraft : characterGrimoire(state.activeCharacterId); }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function toInt(v, fallback) {
@@ -1060,12 +1068,46 @@
     ]
   };
 
-  // Grimoire d'un personnage : celui chargé depuis Drive (state.characters[id].grimoire) s'il
-  // existe, sinon le contenu par défaut codé en dur (SPELLBOOK/DENEOR_SPELLBOOK).
+  function makeGrimoireSpell() {
+    return { name: 'Nouveau sort', type: '', range: '', desc: '', note: '' };
+  }
+  function makeGrimoireSection() {
+    return { title: 'Nouvelle section', levelTag: 'Niv. 1', level: 1, spells: [] };
+  }
+  var EMPTY_GRIMOIRE = { sections: [] };
+
+  // Normalise la forme d'un grimoire (sections/sorts), que ce soit au chargement de state ou pour
+  // le brouillon de l'éditeur "Gérer le Grimoire" — pas d'id sur les sections/sorts (adressage par
+  // index dans le tableau), même convention que cantrip-admin.html.
+  function sanitizeGrimoire(g) {
+    if (!g || typeof g !== 'object' || !Array.isArray(g.sections)) return cloneDeep(EMPTY_GRIMOIRE);
+    g.sections.forEach(function (s) {
+      if (typeof s.title !== 'string') s.title = '';
+      if (typeof s.levelTag !== 'string') s.levelTag = '';
+      if (s.level !== 'classe' && (typeof s.level !== 'number' || isNaN(s.level))) s.level = 0;
+      if (typeof s.level === 'number') s.level = clamp(Math.round(s.level), 0, 9);
+      if (!Array.isArray(s.spells)) s.spells = [];
+      s.spells.forEach(function (sp) {
+        if (typeof sp.name !== 'string') sp.name = '';
+        if (typeof sp.type !== 'string') sp.type = '';
+        if (typeof sp.range !== 'string') sp.range = '';
+        if (typeof sp.desc !== 'string') sp.desc = '';
+        if (typeof sp.note !== 'string') sp.note = '';
+      });
+    });
+    return g;
+  }
+
+  // Grimoire d'un personnage : celui chargé depuis Drive ou édité en jeu (state.characters[id]
+  // .grimoire) s'il existe, sinon le contenu par défaut codé en dur pour Calix/Deneor (SPELLBOOK/
+  // DENEOR_SPELLBOOK), sinon un grimoire vide (futurs personnages créés dynamiquement — un ID
+  // inconnu ne doit jamais retomber sur le grimoire d'un des deux personnages historiques).
   function characterGrimoire(charId) {
     var loaded = state.characters[charId] && state.characters[charId].grimoire;
     if (loaded && Array.isArray(loaded.sections)) return loaded;
-    return charId === 'deneor' ? DENEOR_SPELLBOOK : SPELLBOOK;
+    if (charId === 'calix') return SPELLBOOK;
+    if (charId === 'deneor') return DENEOR_SPELLBOOK;
+    return EMPTY_GRIMOIRE;
   }
 
   function activeSpellbook() {
@@ -1179,6 +1221,7 @@
       case 'grimoire': return renderGrimoire();
       case 'settings': return renderSettings();
       case 'settings-character': return renderSettingsCharacter();
+      case 'settings-grimoire': return renderSettingsGrimoire();
       case 'settings-load-character': return renderSettingsLoadCharacter();
       case 'settings-codex': return renderSettingsCodex();
       default: return renderTracker();
@@ -1720,6 +1763,7 @@
   function renderSettings() {
     var menuItems = [
       { view: 'settings-character', label: 'Paramétrer les statistiques' },
+      { view: 'settings-grimoire', label: 'Gérer le Grimoire' },
       { view: 'settings-load-character', label: 'Gestion des personnages' },
       { view: 'settings-codex', label: 'Codex' }
     ];
@@ -1960,6 +2004,104 @@
         renderSettingsHeader('Paramétrer les statistiques') +
         '<div data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px">' +
           blocks.join(SETTINGS_SEPARATOR) +
+        '</div>' +
+        footerHtml +
+      '</div>'
+    );
+  }
+
+  var GRIMOIRE_LEVEL_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  function renderSettingsGrimoire() {
+    var editing = ui.settingsGrimoireEditing;
+    var locked = !editing;
+    var g = settingsGrimoireData();
+    var lockedRowStyle = locked ? 'pointer-events:none;opacity:0.45;' : '';
+
+    var sectionsHtml = g.sections.map(function (section, sIdx) {
+      var isFirst = sIdx === 0;
+      var isLast = sIdx === g.sections.length - 1;
+      var collapsed = !!ui.settingsGrimoireCollapsed[sIdx];
+
+      var sectionReorderHtml =
+        '<div style="flex:none;display:flex;flex-direction:column;gap:2px;' + lockedRowStyle + '">' +
+          '<div data-action="move-grimoire-section-up" data-section-index="' + sIdx + '" style="width:22px;height:17px;border-radius:5px 5px 0 0;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (isFirst ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9650;</div>' +
+          '<div data-action="move-grimoire-section-down" data-section-index="' + sIdx + '" style="width:22px;height:17px;border-radius:0 0 5px 5px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.3);border-top:none;color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (isLast ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9660;</div>' +
+        '</div>';
+
+      var spellsHtml = section.spells.map(function (spell, spIdx) {
+        var spIsFirst = spIdx === 0;
+        var spIsLast = spIdx === section.spells.length - 1;
+        var spellReorderHtml =
+          '<div style="flex:none;display:flex;flex-direction:column;gap:2px;' + lockedRowStyle + '">' +
+            '<div data-action="move-grimoire-spell-up" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="width:22px;height:17px;border-radius:5px 5px 0 0;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (spIsFirst ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9650;</div>' +
+            '<div data-action="move-grimoire-spell-down" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="width:22px;height:17px;border-radius:0 0 5px 5px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-top:none;color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (spIsLast ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9660;</div>' +
+          '</div>';
+        return '<div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--bg-deep);border-radius:10px;border:1px solid rgba(var(--border-tint),0.16)">' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            spellReorderHtml +
+            '<input type="text" data-action="grimoire-spell-name" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.name) + '" placeholder="Nom du sort" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;font-weight:600;padding:0 10px;box-sizing:border-box"/>' +
+            '<div data-action="remove-grimoire-spell" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+              '<label style="font-size:10px;color:var(--text-muted)">Type</label>' +
+              '<input type="text" data-action="grimoire-spell-type" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.type) + '" placeholder="ACTION, BONUS…" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:34px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
+            '</div>' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+              '<label style="font-size:10px;color:var(--text-muted)">Portée</label>' +
+              '<input type="text" data-action="grimoire-spell-range" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.range) + '" placeholder="9m · Conc. 1 min" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:34px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:4px">' +
+            '<label style="font-size:10px;color:var(--text-muted)">Description</label>' +
+            '<textarea data-action="grimoire-spell-desc" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Effet du sort" ' + (locked ? 'disabled' : '') + ' style="width:100%;min-height:52px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:6px 8px;box-sizing:border-box;font-family:inherit;resize:vertical">' + escapeHtml(spell.desc) + '</textarea>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:4px">' +
+            '<label style="font-size:10px;color:var(--text-muted)">Note d\'usage</label>' +
+            '<textarea data-action="grimoire-spell-note" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Conseil d\'utilisation" ' + (locked ? 'disabled' : '') + ' style="width:100%;min-height:40px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:6px 8px;box-sizing:border-box;font-family:inherit;font-style:italic;resize:vertical">' + escapeHtml(spell.note) + '</textarea>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      var levelSelectHtml = '<select data-action="grimoire-section-level" data-section-index="' + sIdx + '" ' + (locked ? 'disabled' : '') + ' style="flex:1;height:34px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box">' +
+        GRIMOIRE_LEVEL_OPTIONS.map(function (lv) { return '<option value="' + lv + '"' + (section.level === lv ? ' selected' : '') + '>' + (lv === 0 ? 'Sorts mineurs (0)' : 'Niveau ' + lv) + '</option>'; }).join('') +
+        '<option value="classe"' + (section.level === 'classe' ? ' selected' : '') + '>Classe</option>' +
+      '</select>';
+
+      return '<div style="display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid rgba(var(--border-tint),0.2)">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          sectionReorderHtml +
+          '<div data-action="toggle-grimoire-section-collapse" data-section-index="' + sIdx + '" style="flex:none;width:34px;height:34px;border-radius:8px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);transform:rotate(' + (collapsed ? '0' : '90') + 'deg);transition:transform 0.15s">' + iconChevronRight(16) + '</div>' +
+          '<input type="text" data-action="grimoire-section-title" data-section-index="' + sIdx + '" value="' + escapeHtml(section.title) + '" placeholder="Titre de section" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;font-weight:600;padding:0 10px;box-sizing:border-box"/>' +
+          '<div data-action="remove-grimoire-section" data-section-index="' + sIdx + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<label style="font-size:11px;color:var(--text-muted)">Étiquette</label>' +
+          '<input type="text" data-action="grimoire-section-level-tag" data-section-index="' + sIdx + '" value="' + escapeHtml(section.levelTag) + '" placeholder="Niv. 1" maxlength="16" ' + (locked ? 'disabled' : '') + ' style="width:90px;height:34px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
+          '<label style="font-size:11px;color:var(--text-muted)">Niveau</label>' +
+          levelSelectHtml +
+        '</div>' +
+        (collapsed ? '' :
+          (section.spells.length ? '<div style="display:flex;flex-direction:column;gap:8px">' + spellsHtml + '</div>' : '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:8px 0">Aucun sort dans cette section.</div>') +
+          '<div data-action="add-grimoire-spell" data-section-index="' + sIdx + '" style="height:40px;border-radius:10px;background:var(--bg-deep);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;' + lockedRowStyle + '">+ Ajouter un sort</div>'
+        ) +
+      '</div>';
+    }).join('');
+
+    var footerHtml = editing
+      ? '<div style="display:flex;gap:10px;flex:none">' +
+          '<div data-action="cancel-edit-grimoire" style="flex:1;height:48px;border-radius:10px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-edit-grimoire" style="flex:1;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Valider</div>' +
+        '</div>'
+      : '<div data-action="start-edit-grimoire" style="flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Modifier</div>';
+
+    return (
+      '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
+        renderSettingsHeader('Gérer le Grimoire') +
+        '<div data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px">' +
+          (g.sections.length ? sectionsHtml : '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:24px 0">Aucune section pour le moment.</div>') +
+          '<div data-action="add-grimoire-section" style="flex:none;height:44px;border-radius:10px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;' + lockedRowStyle + '">+ Ajouter une section</div>' +
         '</div>' +
         footerHtml +
       '</div>'
@@ -2369,6 +2511,56 @@
       });
     });
 
+    app.querySelectorAll('[data-action="grimoire-section-title"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var section = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)];
+        if (section) section.title = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-section-level-tag"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var section = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)];
+        if (section) section.levelTag = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-section-level"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var section = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)];
+        if (section) section.level = el.value === 'classe' ? 'classe' : clamp(toInt(el.value, 0), 0, 9);
+        render();
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-name"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.name = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-type"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.type = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-range"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.range = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-desc"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.desc = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-note"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.note = el.value;
+      });
+    });
+
     var statsSearchInput = document.getElementById('statsSearchInput');
     if (statsSearchInput) {
       if (focusedSearchId === 'statsSearchInput') {
@@ -2591,6 +2783,10 @@
           ui.settingsLevelError = '';
           ui.disableLevelDialog = null;
         }
+        if (ui.view === 'settings-grimoire' && ui.settingsGrimoireEditing) {
+          ui.settingsGrimoireEditing = false;
+          ui.settingsGrimoireDraft = null;
+        }
         ui.view = e.currentTarget.getAttribute('data-view');
         if (ui.view === 'settings' && ui.githubDeployInfo.status === 'idle') {
           fetchGithubDeployInfo();
@@ -2669,6 +2865,99 @@
         saveState();
         render();
         break;
+
+      case 'start-edit-grimoire':
+        ui.settingsGrimoireEditing = true;
+        ui.settingsGrimoireDraft = sanitizeGrimoire(cloneDeep(characterGrimoire(state.activeCharacterId)));
+        ui.settingsGrimoireCollapsed = {};
+        render();
+        break;
+      case 'cancel-edit-grimoire':
+        ui.settingsGrimoireEditing = false;
+        ui.settingsGrimoireDraft = null;
+        render();
+        break;
+      case 'confirm-edit-grimoire':
+        sanitizeGrimoire(ui.settingsGrimoireDraft);
+        state.characters[state.activeCharacterId].grimoire = ui.settingsGrimoireDraft;
+        ui.settingsGrimoireEditing = false;
+        ui.settingsGrimoireDraft = null;
+        saveState();
+        render();
+        break;
+
+      case 'add-grimoire-section': {
+        settingsGrimoireData().sections.push(makeGrimoireSection());
+        render();
+        break;
+      }
+      case 'remove-grimoire-section': {
+        var removeSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        settingsGrimoireData().sections.splice(removeSectionIdx, 1);
+        render();
+        break;
+      }
+      case 'move-grimoire-section-up': {
+        var upSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var upSections = settingsGrimoireData().sections;
+        if (upSectionIdx > 0) {
+          var upSection = upSections.splice(upSectionIdx, 1)[0];
+          upSections.splice(upSectionIdx - 1, 0, upSection);
+          render();
+        }
+        break;
+      }
+      case 'move-grimoire-section-down': {
+        var downSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var downSections = settingsGrimoireData().sections;
+        if (downSectionIdx < downSections.length - 1) {
+          var downSection = downSections.splice(downSectionIdx, 1)[0];
+          downSections.splice(downSectionIdx + 1, 0, downSection);
+          render();
+        }
+        break;
+      }
+      case 'toggle-grimoire-section-collapse': {
+        var collapseIdx = e.currentTarget.getAttribute('data-section-index');
+        ui.settingsGrimoireCollapsed[collapseIdx] = !ui.settingsGrimoireCollapsed[collapseIdx];
+        render();
+        break;
+      }
+      case 'add-grimoire-spell': {
+        var addSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        settingsGrimoireData().sections[addSpellSectionIdx].spells.push(makeGrimoireSpell());
+        render();
+        break;
+      }
+      case 'remove-grimoire-spell': {
+        var rmSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var rmSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        settingsGrimoireData().sections[rmSpellSectionIdx].spells.splice(rmSpellIdx, 1);
+        render();
+        break;
+      }
+      case 'move-grimoire-spell-up': {
+        var upSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var upSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        var upSpells = settingsGrimoireData().sections[upSpellSectionIdx].spells;
+        if (upSpellIdx > 0) {
+          var upSpell = upSpells.splice(upSpellIdx, 1)[0];
+          upSpells.splice(upSpellIdx - 1, 0, upSpell);
+          render();
+        }
+        break;
+      }
+      case 'move-grimoire-spell-down': {
+        var downSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var downSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        var downSpells = settingsGrimoireData().sections[downSpellSectionIdx].spells;
+        if (downSpellIdx < downSpells.length - 1) {
+          var downSpell = downSpells.splice(downSpellIdx, 1)[0];
+          downSpells.splice(downSpellIdx + 1, 0, downSpell);
+          render();
+        }
+        break;
+      }
 
       case 'add-class-resource': {
         settingsCharacterProfile().classResources.push(makeClassResource('Ressource de Classe', 0));

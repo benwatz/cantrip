@@ -189,12 +189,18 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
 3. **Grimoire** (`renderGrimoire()`) — affiche les capacités du personnage (sorts par niveau +
    capacités de classe et dons), regroupées par section avec badge de type d'action coloré
    (Action/Bonus/Réaction/Rituel/Passif...), niveau, portée/durée et note d'usage en italique.
-   Contenu **statique, codé en dur** dans `index.html` (pas dans `state`), une constante par
-   personnage — `SPELLBOOK` pour Calix Noctavel, `DENEOR_SPELLBOOK` pour Deneor Sentariel —
-   sélectionnée via `activeSpellbook()` selon `state.activeCharacterId`. Pas d'UI d'édition du
-   contenu lui-même ; voir `specifications_jdr_mobile_v2.md` section 7.3 pour la spec d'origine
-   (obsolète sur plusieurs points depuis, notamment la préparation de sorts, voir Historique en
-   fin de section).
+   Contenu par défaut **codé en dur** dans `index.html` (pas dans `state`) pour Calix et Deneor —
+   `SPELLBOOK` pour Calix Noctavel, `DENEOR_SPELLBOOK` pour Deneor Sentariel — mais peut être
+   **remplacé par une version éditée** stockée dans `state.characters[id].grimoire` (voir
+   `characterGrimoire(charId)` : préfère `state.characters[charId].grimoire` s'il existe, sinon
+   retombe sur `SPELLBOOK`/`DENEOR_SPELLBOOK` pour ces deux IDs précisément, sinon (tout futur
+   personnage créé dynamiquement) sur un grimoire vide `{ sections: [] }` — ne jamais retomber sur
+   le grimoire d'un des deux personnages historiques pour un ID inconnu, piège corrigé en août
+   2026 en prévision d'un futur CRUD personnages). `activeSpellbook()` = `characterGrimoire(state
+   .activeCharacterId)`. Édition possible depuis Paramètres → "Gérer le Grimoire" (voir section
+   Paramètres ci-dessous) ; voir `specifications_jdr_mobile_v2.md` section 7.3 pour la spec
+   d'origine (obsolète sur plusieurs points depuis, notamment la préparation de sorts, voir
+   Historique en fin de section).
    Calix et Deneor affichent tous les deux l'intégralité de leur grimoire en lecture seule, de la
    même façon (aucune spécificité par personnage niveau navigation) : la seule façon de mettre un
    sort en avant est le système de **favoris** (étoile par sort, propre à chaque personnage),
@@ -273,13 +279,12 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
      système de favoris ci-dessus — Deneor voit désormais tout son grimoire comme Calix, sans
      restriction de visibilité par sort.
 
-4. **Paramètres** — `renderSettings()` affiche un menu de trois boutons (`data-action="nav"`,
+4. **Paramètres** — `renderSettings()` affiche un menu de quatre boutons (`data-action="nav"`,
    réutilise le pattern générique de navigation) qui renvoient chacun vers une sous-page dédiée :
-   "Paramétrer les statistiques", "Gestion des personnages", "Codex" (pas de "Paramétrer le
-   Grimoire" — cette sous-page a été retirée en août 2026 en même temps que le système de
-   préparation de sorts de Deneor, le Grimoire n'ayant plus rien à y paramétrer). Chaque sous-page
-   a son propre `view` (`settings-character` / `settings-load-character` / `settings-codex`) et
-   affiche en haut un bouton retour (`renderSettingsHeader()`) qui repositionne `ui.view =
+   "Paramétrer les statistiques", "Gérer le Grimoire", "Gestion des personnages", "Codex". Chaque
+   sous-page a son propre `view` (`settings-character` / `settings-grimoire` /
+   `settings-load-character` / `settings-codex`) et affiche en haut un bouton retour
+   (`renderSettingsHeader()`) qui repositionne `ui.view =
    'settings'` (retour au menu, pas au Tracker). Dans la barre de navigation basse, l'onglet
    Paramètres reste en surbrillance tant que `ui.view` commence par `"settings"` (menu ou
    n'importe quelle sous-page). Le deuxième bouton du menu, "Gestion des personnages" (libellé ;
@@ -354,10 +359,35 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
      (`profile.classResource: { enabled, label, max, used }`) vers `classResources` — appliqué à
      chaque chargement, aussi bien au profil actif (`state.profiles[]`) qu'aux instantanés
      `savedProfile` de chaque personnage (voir section Personnages ci-dessous).
-   - **Gestion des personnages** (`renderSettingsLoadCharacter()`, deuxième bouton du menu
+   - **Gérer le Grimoire** (`renderSettingsGrimoire()`, deuxième bouton du menu Paramètres, ajouté
+     en août 2026) — éditeur complet du grimoire du personnage actif (`state.characters[
+     state.activeCharacterId].grimoire`), même pattern brouillon (`cloneDeep()`) +
+     Modifier/Annuler/Valider que "Paramétrer les statistiques" (`ui.settingsGrimoireEditing` /
+     `ui.settingsGrimoireDraft`, aucun `saveState()` avant "Valider"). Au premier tap sur
+     "Modifier", le brouillon est initialisé depuis `characterGrimoire(state.activeCharacterId)`
+     (donc, pour Calix/Deneor n'ayant encore jamais été édités, une copie de `SPELLBOOK`/
+     `DENEOR_SPELLBOOK`) — "Valider" écrit ce brouillon dans `state.characters[...].grimoire`, ce
+     qui fait définitivement basculer ce personnage du contenu codé en dur vers un contenu piloté
+     par `state` (cohérent avec `characterGrimoire()`, voir section Grimoire plus haut). Structure
+     éditée : liste de sections (`title`, `levelTag` — étiquette courte type "Niv. 1"/"Classe",
+     `level` — 0-9 ou `'classe'`, sélecteur `<select>`) contenant chacune une liste de sorts
+     (`name`, `type`, `range`, `desc`, `note`) ; sections et sorts réordonnables
+     (`move-grimoire-section-up`/`-down`, `move-grimoire-spell-up`/`-down`, même pattern ▲/▼ que
+     les ressources de classe et attaques de "Paramétrer les statistiques") et supprimables
+     individuellement, adressés **par index** dans leurs tableaux respectifs (`data-section-index`
+     / `data-spell-index`) plutôt que par `id` — pas d'`id` sur les sections/sorts, pour rester
+     compatible avec le format déjà utilisé par `cantrip-admin.html` et par la synchro Drive
+     (`bdd.json`) qui n'en génèrent pas non plus. `sanitizeGrimoire()` normalise cette forme (au
+     chargement de `state` comme pour le brouillon de cet éditeur). Chaque section peut être
+     repliée/dépliée (`ui.settingsGrimoireCollapsed`, éphémère, non lié au pattern replié/déplié du
+     Tracker) pour naviguer dans un grimoire à beaucoup de sorts sans scroller à l'infini ; le
+     chevron reste cliquable même hors édition (lecture seule). Un filet de sécurité dans le cas
+     générique `'nav'` de `onAction()` abandonne le brouillon en cours si on quitte la page sans
+     passer par Annuler/Valider (même pattern que "Paramétrer les statistiques").
+   - **Gestion des personnages** (`renderSettingsLoadCharacter()`, troisième bouton du menu
      Paramètres) — voir section Personnages ci-dessous. Pas de toggle de thème ici : le thème suit
      le personnage chargé, voir section Thèmes (Calix / Deneor) plus bas.
-   - **Codex** (`renderSettingsCodex()`, troisième bouton du menu Paramètres) — répertoire de PNJ
+   - **Codex** (`renderSettingsCodex()`, quatrième bouton du menu Paramètres) — répertoire de PNJ
      (`CODEX_PNJ`, objets `{ prenom, nom, occupation, faction, lieu, portrait, ... }`) avec un
      champ de recherche live (`ui.codexSearch`) triant par pertinence sur prénom/nom/occupation/
      lieu (`codexMatchRank()`, même principe exact > préfixe > contient que Personnage et
