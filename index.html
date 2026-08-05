@@ -734,6 +734,29 @@
     });
   }
 
+  // Pas de pipeline CI ni de build step : le déploiement GitHub Pages se fait automatiquement à
+  // chaque push sur master, donc la date du dernier commit sur master sert de proxy fiable pour
+  // la date du dernier déploiement.
+  function fetchGithubDeployInfo() {
+    ui.githubDeployInfo.status = 'loading';
+    fetch('https://api.github.com/repos/benwatz/cantrip/commits/master')
+      .then(function (res) { if (!res.ok) throw new Error('http ' + res.status); return res.json(); })
+      .then(function (data) {
+        ui.githubDeployInfo.status = 'loaded';
+        ui.githubDeployInfo.date = data.commit.committer.date;
+        render();
+      })
+      .catch(function () {
+        ui.githubDeployInfo.status = 'error';
+        render();
+      });
+  }
+
+  function formatDeployDate(iso) {
+    var d = new Date(iso);
+    return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
   function driveLoadBdd() {
     return driveEnsureToken().then(function (token) {
       return driveEnsureFile(token).then(function (fileId) {
@@ -815,7 +838,8 @@
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     spellDetail: null, // null | { spell, levelTag, leaving: bool } — popup d'infos complètes au tap sur un sort du Grimoire
-    spellDetailEnterPending: false // true juste après déclenchement ; consommé une fois par render()
+    spellDetailEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
+    githubDeployInfo: { status: 'idle', date: null } // 'idle'|'loading'|'loaded'|'error' — date du dernier commit sur master (proxy du dernier déploiement GitHub Pages), affichée en bas de Paramètres
   };
 
   function profile() { return state.profiles[state.activeProfileIndex]; }
@@ -1706,10 +1730,18 @@
         '</div>';
     }).join('');
 
+    var deployText = ui.githubDeployInfo.status === 'loaded' && ui.githubDeployInfo.date
+      ? 'Dernière mise à jour : ' + formatDeployDate(ui.githubDeployInfo.date)
+      : ui.githubDeployInfo.status === 'error'
+        ? 'Dernière mise à jour : indisponible'
+        : 'Dernière mise à jour : …';
+
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;flex:none" class="font-cinzel">Paramètres</div>' +
         '<div style="display:flex;flex-direction:column;gap:10px">' + itemsHtml + '</div>' +
+        '<div style="flex:1"></div>' +
+        '<div style="flex:none;text-align:center;font-size:11px;color:var(--text-muted);padding-bottom:2px">' + deployText + '</div>' +
       '</div>'
     );
   }
@@ -2560,6 +2592,9 @@
           ui.disableLevelDialog = null;
         }
         ui.view = e.currentTarget.getAttribute('data-view');
+        if (ui.view === 'settings' && ui.githubDeployInfo.status === 'idle') {
+          fetchGithubDeployInfo();
+        }
         render();
         break;
       }
