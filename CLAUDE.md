@@ -29,10 +29,9 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
   mutation.
 - `ui` : état éphémère non persisté (page active, champs en cours d'édition, recherche...).
   Voir `ui.view` pour la page courante.
-- `render()` : dispatch vers `renderTracker()` / `renderStats()` / `renderGrimoireV2()` (V1 dormante,
-  voir section Grimoire) / `renderSettings()` (menu Paramètres) / `renderSettingsCharacter()` /
-  `renderSettingsGrimoire()` /
-  `renderSettingsLoadCharacter()` selon `ui.view`, puis ajoute
+- `render()` : dispatch vers `renderTracker()` / `renderStats()` / `renderGrimoire()` /
+  `renderSettings()` (menu Paramètres) / `renderSettingsCharacter()` /
+  `renderSettingsLoadCharacter()` / `renderSettingsCodex()` selon `ui.view`, puis ajoute
   `renderBottomNav()`. Chaque page occupe toute la hauteur disponible (`height:100%`, pas de
   scroll de la page globale — seuls les conteneurs `[data-scroll-root]` scrollent en interne).
 - `bindEvents()` : re-attache tous les event listeners après chaque re-render (délégation via
@@ -186,199 +185,111 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    Les deux sont pilotés directement par des listeners `focus`/`blur` sur `#statsSearchInput` qui
    togglent leur style **sans appeler `render()`** — un `render()` y recréerait l'input et le
    refocaliserait, ce qui redéclencherait `focus` en boucle (même pattern que
-   `#grimoirePrepareFab`).
-3. **Grimoire** — affiche les capacités du personnage (sorts par niveau + capacités de classe et
-   dons), regroupées par section avec badge de type d'action coloré (Action/Bonus/Réaction/
-   Rituel/Passif...), niveau, portée/durée et note d'usage en italique. Contenu **statique,
-   codé en dur** dans `index.html` (pas dans `state`), une constante par personnage —
-   `SPELLBOOK` pour Calix Noctavel, `DENEOR_SPELLBOOK` pour Deneor Sentariel — sélectionnée via
-   `activeSpellbook()` selon `state.activeCharacterId`. Pas d'UI d'édition du contenu lui-même
-   (CRUD depuis Paramètres, multi-personnage générique) ; voir `specifications_jdr_mobile_v2.md`
-   section 7.3 pour la spec d'origine.
-   **Grimoire de Deneor (Paladin, Serment des Anciens)** : système de préparation de sorts
-   quotidienne, voir sous-section dédiée plus bas.
-   **Navigation V2 (août 2026)** — `renderGrimoireV2()` a remplacé l'ancienne navigation par
-   filtres de niveau combinables (décrite juste en dessous), jugée peu lisible avec beaucoup de
-   niveaux actifs à la fois. Cette ancienne implémentation est conservée **intacte mais non
-   appelée** sous le nom `renderGrimoireV1()` (juste avant `renderGrimoireV2()` dans
-   `index.html`) pour permettre un rollback rapide : il suffit de remplacer `renderGrimoireV2()`
-   par `renderGrimoireV1()` dans le `case 'grimoire'` de `renderPage()`. `renderGrimoireSection()`
-   (rendu d'une section avec ses sorts, y compris le tap → popup de détail décrit plus bas) reste
-   elle aussi inchangée et continue de servir `renderGrimoireV1()` et `renderGrimoirePrepare()` ;
-   V2 utilise sa propre variante `renderGrimoireSectionV2()` (identique, y compris le tap sur la
-   ligne qui ouvre la même popup de détail, mais avec une étoile de favori en plus à gauche du
-   nom — son clic appelle `e.stopPropagation()` dans le handler `toggle-favorite-spell` pour ne
-   pas aussi déclencher l'ouverture de la popup, ligne et étoile portant chacune leur propre
-   `data-action` donc leur propre listener de clic).
-   Pas de titre "Grimoire" en tête de page en V2 (retiré en août 2026 pour remonter le champ de
-   recherche tout en haut, gagner une ligne verticale) — contrairement à V1 et à la plupart des
-   autres pages qui gardent leur titre `font-cinzel` en première position.
-   V2 remplace les filtres de niveau combinables par une barre à 5 zones sous le champ de
-   recherche : un bouton **"Tous"** (à gauche), une **flèche gauche** puis un **bouton central**
-   affichant le niveau courant (ex. "Niveau 3" ou "Classe") et une **flèche droite** (au centre,
-   `data-action="grimoire-step" data-delta="-1"/"1"`, sans effet de bord aux extrémités), puis un
-   bouton **étoile "Favoris"** (à droite). Les flèches réutilisent `iconArrowLeft()` — la droite
-   via `transform:scaleX(-1)` sur son conteneur, même technique que les flèches du carrousel
-   "Charger un personnage" — plutôt que des glyphes `−`/`+` (remplacés en août 2026, après un
-   premier retour utilisateur qui les trouvait moins lisibles que de vraies flèches directionnelles
-   sur un sélecteur de niveau). Boutons agrandis à 44×44 (depuis 34×34, août 2026, jugés trop
-   petits pour être tapés confortablement) ; le bouton central n'utilise plus `flex:1` mais une
-   largeur au contenu (`padding:0 14px`, sans `min-width`) pour ne pas accaparer l'espace gagné par
-   cet agrandissement — son texte ("Tous les sorts" au pire cas) tient largement dedans, donc la
-   barre entière est maintenant plus étroite que la carte et centrée dedans
-   (`justify-content:center` sur la ligne) plutôt que de l'occuper toute la largeur. Un tap sur le
-   bouton central
-   (`data-action="toggle-grimoire-level-menu"`, état `ui.grimoireLevelMenuOpen`) ouvre une grille
-   de sélection directe de tous les niveaux + "Classe" (`grimoireTabs()`, inchangée, toujours la
-   seule source pour le cycle −/+ et cette grille), qui se referme au choix d'une entrée — le
-   bouton central n'affiche plus de chevron indicateur (retiré en août 2026, jugé redondant avec le
-   simple fait que le libellé de niveau soit cliquable). `ui.grimoireTab` (état dédié à V2, distinct
-   de `ui.grimoireLevelFilters` qui reste propre à V1/Préparation) accepte en plus deux valeurs
-   propres à V2, `'tous'` et `'favoris'` — jamais renvoyées par `grimoireTabs()` — qui affichent
-   tous les niveaux + Classe à la suite ; dans ces deux modes les flèches sont désactivées (le
-   handler `grimoire-step` ne fait rien si `ui.grimoireTab` n'est pas dans `grimoireTabs()`). Le
-   swipe horizontal a été retiré de `#grimoireSwipe` en même temps que le passage en filtres
-   combinables (voir plus bas) et n'a pas été réintroduit pour V2 : seules les flèches et la grille
-   de sélection changent de niveau.
-   Comme en V1, `renderGrimoirePrepare()` recale `ui.grimoireTab`/`ui.grimoireLevelFilters` à sa
-   façon — ils sont indépendants, V2 n'a donc rien de spécial à gérer en entrant sur la page
-   Préparation.
-   **Pas de filtres par type en V2** — contrairement à V1 (Action/Bonus/Réaction, voir plus bas),
-   V2 n'affiche pas les chips `GRIMOIRE_FILTERS` (retirées en août 2026, jugées redondantes avec la
-   recherche par nom) : `renderGrimoireV2()` n'appelle plus `spellMatchesGrimoireFilters()` et
-   n'expose donc plus aucun moyen de faire varier `ui.grimoireFilters` depuis cette page — l'état
-   reste défini (partagé avec V1) mais figé à ses valeurs par défaut tant que seule V2 est utilisée.
-   **Recherche** (`#grimoireSearchInput`, `ui.grimoireSearch`) : même pattern d'interaction que
-   `#statsSearchInput` sur la page Personnage — filtre en direct sur le nom du sort (pas la
-   description), tri par pertinence (exact, préfixe, contient), présélection du contenu exclue au
-   focus (c'est un filtre, pas une valeur à remplacer). Le focus masque `#grimoireChromeBlock`
-   (barre de niveau, dans son propre conteneur pour ce besoin) et affiche une croix de
-   réinitialisation (`#grimoireResetBtn`, `data-action="reset-grimoire-search"`), pilotés
-   directement en JS sans `render()` (même raison qu'ailleurs : un `render()` re-focaliserait
-   l'input, ce qui redéclencherait `focus` en boucle). Un filet de sécurité identique à celui de
-   Personnage existe aussi dans le listener `visualViewport.resize` pour les claviers Android qui
-   se ferment sans déclencher de `blur`. Tant qu'une recherche est active, elle ignore le mode
-   courant (niveau/Tous/Favoris) et affiche les résultats de **tout** le grimoire, groupés par
-   section comme d'habitude (la puce de niveau déjà affichée sur chaque ligne de sort suffit à
-   resituer chaque résultat) ; elle respecte toujours la restriction Deneor (sorts non préparés
-   jamais trouvables). Revenir en arrière (croix ou `blur` avec champ vide) réaffiche exactement le
-   mode/niveau qui était sélectionné avant la recherche.
-   **Favoris** : étoile cliquable au début de chaque ligne de sort (`data-action=
-   "toggle-favorite-spell"`, `renderGrimoireSectionV2()` uniquement), toggle instantané (pas de
-   brouillon/validation, contrairement aux sorts préparés) persisté dans `profile().favoriteSpells`
-   (tableau de noms, migré par `sanitizeProfile()` comme `preparedSpells`, propre à chaque
-   personnage). Le mode "Favoris" les affiche tous niveaux confondus ; aucun sort favori affiche
-   un message dédié plutôt que "Aucun sort à ce niveau".
+   `#grimoireSearchInput`, voir section Grimoire ci-dessous).
+3. **Grimoire** (`renderGrimoire()`) — affiche les capacités du personnage (sorts par niveau +
+   capacités de classe et dons), regroupées par section avec badge de type d'action coloré
+   (Action/Bonus/Réaction/Rituel/Passif...), niveau, portée/durée et note d'usage en italique.
+   Contenu **statique, codé en dur** dans `index.html` (pas dans `state`), une constante par
+   personnage — `SPELLBOOK` pour Calix Noctavel, `DENEOR_SPELLBOOK` pour Deneor Sentariel —
+   sélectionnée via `activeSpellbook()` selon `state.activeCharacterId`. Pas d'UI d'édition du
+   contenu lui-même ; voir `specifications_jdr_mobile_v2.md` section 7.3 pour la spec d'origine
+   (obsolète sur plusieurs points depuis, notamment la préparation de sorts, voir Historique en
+   fin de section).
+   Calix et Deneor affichent tous les deux l'intégralité de leur grimoire en lecture seule, de la
+   même façon (aucune spécificité par personnage niveau navigation) : la seule façon de mettre un
+   sort en avant est le système de **favoris** (étoile par sort, propre à chaque personnage),
+   décrit plus bas.
+   Pas de titre "Grimoire" en tête de page (retiré en août 2026 pour remonter le champ de
+   recherche tout en haut, gagner une ligne verticale) — contrairement à la plupart des autres
+   pages qui gardent leur titre `font-cinzel` en première position.
+   **Barre de sélection** (`#grimoireChromeBlock`) sous le champ de recherche, à 5 zones : un
+   bouton **"Tous"** (à gauche, collé au bord de la carte), une **flèche gauche** puis un
+   **bouton central** affichant le niveau courant ("-" en mode Tous, "Niv.N" pour un niveau,
+   "Classe", ou "Favoris" — police 13px) et une **flèche droite** (au centre,
+   `data-action="grimoire-step" data-delta="-1"/"1"`), puis un bouton **étoile "Favoris"** (à
+   droite, collé au bord de la carte). Boutons à 58×58 (agrandis de 44×44 en août 2026), bouton
+   central en `flex:1` pour occuper tout l'espace restant entre les deux flèches. Les flèches
+   réutilisent `iconArrowLeft()` — la droite via `transform:scaleX(-1)` sur son conteneur, même
+   technique que les flèches du carrousel "Charger un personnage".
+   **Tous et Favoris bornent la chaîne de navigation** des flèches -/+ (août 2026) : la séquence
+   complète est `['tous'].concat(grimoireTabs()).concat(['favoris'])` (`grimoireTabs()` renvoie
+   les niveaux réels ascendants + `'classe'`). Depuis "Tous", la flèche droite mène au premier
+   niveau (0 ou 1 selon si le personnage a des sorts mineurs), la flèche gauche est désactivée.
+   Depuis "Favoris", la flèche gauche mène au dernier onglet ("Classe"), la flèche droite est
+   désactivée. Un tap sur le bouton central (`data-action="toggle-grimoire-level-menu"`, état
+   `ui.grimoireLevelMenuOpen`) ouvre une grille de sélection directe de tous les niveaux +
+   "Classe" (cellules 46×46, avec un `margin-top:8px` pour ne pas coller à la barre au-dessus),
+   qui se referme au choix d'une entrée. `ui.grimoireTab` accepte en plus des niveaux réels deux
+   valeurs propres à cette page, `'tous'` et `'favoris'` (jamais renvoyées par `grimoireTabs()`,
+   qui reste la seule source pour le cycle -/+ et le menu déroulant).
+   **Recherche** (`#grimoireSearchInput`, `ui.grimoireSearch`, placeholder "Rechercher") : même
+   pattern d'interaction que `#statsSearchInput` sur la page Personnage — filtre en direct sur le
+   nom du sort (pas la description), tri par pertinence (exact, préfixe, contient), présélection
+   du contenu exclue au focus (c'est un filtre, pas une valeur à remplacer). Le focus masque
+   `#grimoireChromeBlock` et affiche une croix de réinitialisation (`#grimoireResetBtn`,
+   `data-action="reset-grimoire-search"`), pilotés directement en JS sans `render()` (même raison
+   qu'ailleurs : un `render()` re-focaliserait l'input, ce qui redéclencherait `focus` en boucle).
+   Un filet de sécurité identique à celui de Personnage existe aussi dans le listener
+   `visualViewport.resize` pour les claviers Android qui se ferment sans déclencher de `blur`.
+   Tant qu'une recherche est active, elle ignore le mode courant (niveau/Tous/Favoris) et affiche
+   les résultats de **tout** le grimoire, groupés par section comme d'habitude (la puce de niveau
+   déjà affichée sur chaque ligne de sort suffit à resituer chaque résultat). Revenir en arrière
+   (croix ou `blur` avec champ vide) réaffiche exactement le mode/niveau qui était sélectionné
+   avant la recherche.
+   **Favoris** : étoile cliquable au début de chaque ligne de sort
+   (`data-action="toggle-favorite-spell"`), toggle instantané (pas de brouillon/validation)
+   persisté dans `profile().favoriteSpells` (tableau de noms, migré par `sanitizeProfile()`,
+   propre à chaque personnage). Le clic sur l'étoile appelle `e.stopPropagation()` pour ne pas
+   aussi déclencher l'ouverture de la popup de détail (ligne et étoile portent chacune leur propre
+   `data-action`, donc chacune son propre listener de clic). Le mode "Favoris" les affiche tous
+   niveaux confondus ; aucun sort favori affiche un message dédié plutôt que "Aucun sort à ce
+   niveau". Le profil par défaut de Deneor a des favoris pré-remplis (migrés depuis l'ancienne
+   liste de sorts préparés lors du retrait de ce système, voir Historique).
+   **Popup de détail d'un sort** : tap sur une ligne de sort (hors étoile,
+   `data-action="open-spell-detail"`) pour ouvrir une popup plein contenu (nom complet, niveau,
+   type, portée, description et note, sans troncature ni ellipsis — utile car le nom du sort dans
+   la ligne est tronqué en ellipsis CSS s'il est trop long). `findSpellDetail()` recherche le
+   sort par nom dans tout `characterGrimoire(state.activeCharacterId)` (toutes sections
+   confondues) plutôt que de sérialiser ses infos dans des attributs `data-*`. Même principe
+   d'animation enter/leave que le portrait agrandi du Codex (`ui.spellDetail = { spell, levelTag,
+   leaving }` / `ui.spellDetailEnterPending`, classes CSS
+   `spell-detail-backdrop/card-enter/leave`, `startLeavingSpellDetail()` avec un `setTimeout` dont
+   la durée matche l'animation de sortie avant de vider l'état). Fermeture au tap sur le fond ou
+   sur la croix (les deux déclenchent `close-spell-detail` puisque tout le contenu de la popup
+   bubble jusqu'au fond, aucun `stopPropagation` — même comportement que la prévisualisation du
+   Codex).
 
-   **Navigation V1 (dormante, conservée pour rollback)** — Onglets de niveau sous le titre
-   "Grimoire" : un onglet par niveau de sort de 0 à
-   `maxEnabledSpellLevel()` (le plus haut niveau d'emplacement activé dans Paramètres) — l'onglet
-   0 est omis si le grimoire actif (`activeSpellbook()`) n'a aucun sort de niveau 0 (cas de Deneor,
-   qui n'a pas de sorts mineurs de Paladin) —, plus un onglet "Classe" en dernière position pour la
-   section "Capacités de classe et dons" (non liée à un niveau). Depuis juillet 2026, ce ne sont
-   plus des onglets à sélection exclusive mais des **filtres combinables** (même principe que les
-   filtres par type ci-dessous) : chaque niveau togglé indépendamment au tap
-   (`data-action="toggle-grimoire-level"`, état `ui.grimoireLevelFilters`, objet éphémère
-   `{ [niveau|'classe']: bool }`) se combine en OR avec les autres niveaux actifs — les sections de
-   plusieurs niveaux s'affichent alors empilées dans la même page. Un chip **"Tous"** dédié
-   (`data-action="toggle-grimoire-level-all"`, en première position sur la même ligne) sert de
-   raccourci maître : actif seulement quand tous les niveaux le sont, il les active/désactive tous
-   d'un coup plutôt que d'être un niveau parmi d'autres. `ensureGrimoireLevelFilters(tabs)`
-   initialise paresseusement `ui.grimoireLevelFilters` avec tous les niveaux à `true` (équivalent
-   visuel à "Tous" sélectionné) au premier rendu, et complète les nouvelles clés qui apparaissent
-   ensuite (ex. activation d'un niveau d'emplacement dans Paramètres) sans toucher aux niveaux déjà
-   togglés par l'utilisateur. Aucun niveau actif affiche "Sélectionnez au moins un niveau."
-   plutôt que la liste vide. Il n'y a plus de swipe horizontal pour naviguer entre niveaux (retiré
-   juillet 2026 en même temps que ce passage en filtres combinables — la notion de niveau "suivant/
-   précédent" n'a plus de sens dès lors que plusieurs peuvent être actifs simultanément) : seul le
-   tap sur les chips permet de les toggler, `#grimoireSwipe` ne portant plus que le scroll vertical
-   du contenu. Même logique dans `renderGrimoirePrepare()` (utilisée aussi bien par V1 que V2,
-   puisque cette page n'a pas été retouchée).
-   Filtres par type sur la même ligne que le titre "Grimoire", alignés à droite : Action / Bonus
-   / Réaction (`GRIMOIRE_FILTERS`, chips `data-action="toggle-grimoire-filter"`). Plusieurs
-   filtres actifs se combinent en OR (`spellMatchesGrimoireFilters()`) ; aucun filtre actif =
-   tout afficher. L'état (`ui.grimoireFilters`, éphémère, partagé avec V2) est conservé en
-   changeant les filtres de niveau puisqu'il n'est jamais réinitialisé par `renderGrimoireV1()`/
-   `renderGrimoireV2()`.
-   **Popup de détail d'un sort** (juillet 2026, tous grimoires — V1 et V2 —, hors mode
-   Préparation) : tap sur une ligne de sort (`data-action="open-spell-detail"`) pour ouvrir une
-   popup plein contenu (nom complet, niveau, type, portée, description et note, sans troncature ni
-   ellipsis — utile car le nom du sort dans la ligne est tronqué en ellipsis CSS s'il est trop
-   long). `findSpellDetail()` recherche le sort par nom dans tout
-   `characterGrimoire(state.activeCharacterId)` (toutes sections confondues) plutôt que de
-   sérialiser ses infos dans des attributs `data-*`. Même principe d'animation enter/leave que le
-   portrait agrandi du Codex (`ui.spellDetail = { spell, levelTag, leaving }` /
-   `ui.spellDetailEnterPending`, classes CSS `spell-detail-backdrop/card-enter/leave`,
-   `startLeavingSpellDetail()` avec un `setTimeout` dont la durée matche l'animation de sortie
-   avant de vider l'état). Fermeture au tap sur le fond ou sur la croix (les deux déclenchent
-   `close-spell-detail` puisque tout le contenu de la popup bubble jusqu'au fond, aucun
-   `stopPropagation` — même comportement que la prévisualisation du Codex). En mode Préparation
-   (`renderGrimoireSection(section, spells, true)`), le tap sur une ligne continue de (dé)préparer
-   le sort comme avant (`data-action="toggle-prepared-spell"`) : la popup ne s'y ouvre pas, pour ne
-   pas entrer en conflit avec cette interaction existante.
+   **Historique (code retiré, pas seulement désactivé)** — deux évolutions majeures ont disparu
+   du Grimoire en août 2026 :
+   - Une **navigation par onglets de niveau en filtres combinables** (plusieurs niveaux affichés
+     empilés à la fois, avec des chips de filtre par type Action/Bonus/Réaction) a précédé la
+     barre à 5 zones actuelle, jugée plus lisible. Gardée un temps intacte-mais-jamais-appelée
+     (`renderGrimoireV1()`) comme filet de rollback, elle a fini par diverger de la version
+     courante (pas de recherche, pas de favoris) au point de ne plus être un filet de sécurité
+     valable, et a été supprimée pour de bon.
+   - Un **système de préparation de sorts quotidienne** existait pour Deneor (Paladin) :
+     `profile().preparedSpells`, une page dédiée de sélection, un bouton flottant sur le Grimoire
+     et une option dans la modale Repos ("Se reposer et préparer des sorts"). Retiré au profit du
+     système de favoris ci-dessus — Deneor voit désormais tout son grimoire comme Calix, sans
+     restriction de visibilité par sort.
 
-   **Préparation de sorts (Deneor uniquement)** — contrairement à Calix, le Grimoire de Deneor
-   n'affiche pas tout `DENEOR_SPELLBOOK` en lecture seule : dans `renderGrimoireV1()`/
-   `renderGrimoireV2()`, les sections
-   autres que `classe` sont filtrées aux sorts ayant `alwaysAvailable: true` (sorts de serment,
-   toujours disponibles) ou présents dans `profile().preparedSpells` (tableau de noms de sorts,
-   persistant, migré par `sanitizeProfile()`) ; la section `classe` (capacités de classe, de
-   serment, et la card `SERMENT` de résumé des préceptes) reste toujours affichée en entier.
-   Une page dédiée `renderGrimoirePrepare()` (`view: 'grimoire-prepare'`) permet de choisir les
-   sorts préparés, sans plafond imposé : elle réutilise les filtres de niveau
-   (`grimoireTabs()`/`ui.grimoireLevelFilters`, `#grimoireSwipe` partagé puisque les deux pages ne
-   sont jamais montées en même temps) **sans l'onglet Classe**,
-   filtré (`tabs.filter(t => t !== 'classe')`) puisque les capacités de classe/serment ne sont pas
-   préparables — elles n'apparaissent que dans le Grimoire normal. Pour chaque niveau, affiche
-   uniquement les sorts préparables (`!spell.alwaysAvailable`) ; les sorts de serment toujours
-   disponibles n'apparaissent jamais sur cette page non plus. Rendus par `renderGrimoireSection
-   (section, spells, true)`, chaque sort toggle sa présence au tap
-   (`data-action="toggle-prepared-spell"`) avec une mise en évidence volontairement appuyée (fond
-   vert teinté, bordure gauche verte pleine, et un badge circulaire à coche à gauche du nom) car
-   la version précédente — un simple liseré `border-tint` — se distinguait trop peu du reste de
-   la liste. Un badge rond mis en valeur (fond plein, juste le chiffre) affiche le nombre total de
-   sorts sélectionnés (tous niveaux confondus) en haut à droite de l'en-tête ; comme la liste
-   affichée peut ne couvrir qu'une partie des niveaux (filtres de niveau non tous actifs), une
-   pastille verte est aussi ajoutée sur chaque onglet de niveau contenant au moins un sort préparé
-   (`grimoireTabsHtml(tabs, dotLevels)`,
-   paramètre optionnel calculé dans `renderGrimoirePrepare()` uniquement) pour repérer d'un coup
-   d'oeil où se trouvent les sorts comptés dans le badge. Filtres dédiés `PREPARE_FILTERS` (état
-   `ui.prepareFilters`, éphémère) : Action / Bonus (pas de Réaction — aucun sort de ce type chez
-   Deneor — ni de Classe), plus deux filtres "Préparé"/"Non préparé" (juillet 2026) qui ne testent
-   pas le type du sort mais sa présence (ou absence) dans `ui.draftPreparedSpells` (traités à part
-   de la correspondance par préfixe de type dans `spellMatchesPrepareTypeFilters()`) ; comme les
-   autres filtres du Grimoire, chaque chip togglé indépendamment au clic
-   (`data-action="toggle-prepare-filter"`) et combiné en OR avec les autres filtres actifs — activer
-   à la fois "Préparé" et "Non préparé" affiche donc tous les sorts (union des deux), pas
-   l'intersection vide.
-   **Brouillon non destructif** : les sélections ne modifient pas directement
-   `profile().preparedSpells` mais une copie de travail éphémère `ui.draftPreparedSpells`
-   (initialisée à l'entrée sur la page, dans les trois points d'entrée ci-dessous). La flèche
-   retour en haut à gauche (`data-action="nav"`) ferme la page sans rien valider — le brouillon est
-   simplement abandonné. Seul le bouton "Valider" en bas de page
-   (`data-action="confirm-grimoire-prepare"`) répercute `ui.draftPreparedSpells` dans
-   `profile().preparedSpells`, sauvegarde (`saveState()`) et revient à `ui.grimoirePrepareBackView`.
-   Trois points d'entrée vers cette page, chacun fixant `ui.grimoirePrepareBackView` (pour que le
-   bouton retour/Valider revienne au bon endroit) et `ui.draftPreparedSpells` : le bouton flottant
-   `#grimoirePrepareFab` en bas du Grimoire (visible seulement en haut de la liste, listener de
-   scroll sur `#grimoireSwipe` dans `bindEvents()` qui bascule directement
-   `style.opacity`/`pointerEvents` sans `render()`), le bouton "Préparer mes sorts" de
-   `renderSettingsGrimoire()` (qui bascule aussi sur son contenu Deneor selon
-   `state.activeCharacterId`), et le bouton "Se reposer et préparer des sorts" de la modale Repos
-   (Deneor uniquement, `confirmRestAndPrepare()` — factorisé avec `confirmRest()` via
-   `applyRestChecks()` commun).
 4. **Paramètres** — `renderSettings()` affiche un menu de trois boutons (`data-action="nav"`,
-   réutilise le pattern générique de navigation) qui renvoient chacun vers une sous-page dédiée.
-   Chaque sous-page a son propre `view` (`settings-character` / `settings-grimoire` /
-   `settings-load-character`) et affiche en haut un bouton retour (`renderSettingsHeader()`) qui
-   repositionne `ui.view = 'settings'` (retour au menu, pas au Tracker). Dans la barre de
-   navigation basse, l'onglet Paramètres reste en surbrillance tant que `ui.view` commence par
-   `"settings"` (menu ou n'importe quelle sous-page). Le troisième bouton du menu, "Gestion des
-   personnages" (libellé ; la vue interne garde le nom `settings-load-character`), renvoie
-   directement à `renderSettingsLoadCharacter()` (voir section Personnages ci-dessous) — il n'y a
-   plus de niveau intermédiaire "Paramétrer l'application" depuis juillet 2026 (l'écran ne servait
-   plus qu'à ça après le retrait de l'export/import JSON, voir plus bas).
-   - **Paramétrer le Personnage** (`renderSettingsCharacter()`) — nom du personnage,
+   réutilise le pattern générique de navigation) qui renvoient chacun vers une sous-page dédiée :
+   "Paramétrer les statistiques", "Gestion des personnages", "Codex" (pas de "Paramétrer le
+   Grimoire" — cette sous-page a été retirée en août 2026 en même temps que le système de
+   préparation de sorts de Deneor, le Grimoire n'ayant plus rien à y paramétrer). Chaque sous-page
+   a son propre `view` (`settings-character` / `settings-load-character` / `settings-codex`) et
+   affiche en haut un bouton retour (`renderSettingsHeader()`) qui repositionne `ui.view =
+   'settings'` (retour au menu, pas au Tracker). Dans la barre de navigation basse, l'onglet
+   Paramètres reste en surbrillance tant que `ui.view` commence par `"settings"` (menu ou
+   n'importe quelle sous-page). Le deuxième bouton du menu, "Gestion des personnages" (libellé ;
+   la vue interne garde le nom `settings-load-character`), renvoie directement à
+   `renderSettingsLoadCharacter()` (voir section Personnages ci-dessous) — il n'y a plus de niveau
+   intermédiaire "Paramétrer l'application" depuis juillet 2026 (l'écran ne servait plus qu'à ça
+   après le retrait de l'export/import JSON, voir plus bas).
+   - **Paramétrer les statistiques** (`renderSettingsCharacter()`, libellé renommé depuis
+     "Paramétrer le Personnage" en août 2026 — la vue interne garde le nom `settings-character`,
+     tout comme les identifiants de code cités ci-dessous) — nom du personnage,
      CA/Initiative/Déplacement/DD Sauv/Bonus aux sorts/Dés de vie (`data-action="combat-input"`,
      Initiative et Bonus aux sorts signés via `formatSigned()`, CA/Déplacement/DD Sauv non signés,
      Dés de vie en texte libre, ex. "5d8"), liste d'attaques (voir ci-dessous), config des
@@ -443,14 +354,16 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
      (`profile.classResource: { enabled, label, max, used }`) vers `classResources` — appliqué à
      chaque chargement, aussi bien au profil actif (`state.profiles[]`) qu'aux instantanés
      `savedProfile` de chaque personnage (voir section Personnages ci-dessous).
-   - **Paramétrer le Grimoire** (`renderSettingsGrimoire()`) — branché sur
-     `state.activeCharacterId` : pour Calix, contenu inchangé et non éditable (`SPELLBOOK` fixe,
-     emplacement UI "à venir" pour un futur sélecteur connus/préparés côté Calix — non développé).
-     Pour Deneor, affiche un résumé du système de préparation et un bouton "Préparer mes sorts"
-     vers `renderGrimoirePrepare()` (voir section Grimoire plus haut).
-   - **Gestion des personnages** (`renderSettingsLoadCharacter()`, troisième bouton du menu
+   - **Gestion des personnages** (`renderSettingsLoadCharacter()`, deuxième bouton du menu
      Paramètres) — voir section Personnages ci-dessous. Pas de toggle de thème ici : le thème suit
      le personnage chargé, voir section Thèmes (Calix / Deneor) plus bas.
+   - **Codex** (`renderSettingsCodex()`, troisième bouton du menu Paramètres) — répertoire de PNJ
+     (`CODEX_PNJ`, objets `{ prenom, nom, occupation, faction, lieu, portrait, ... }`) avec un
+     champ de recherche live (`ui.codexSearch`) triant par pertinence sur prénom/nom/occupation/
+     lieu (`codexMatchRank()`, même principe exact > préfixe > contient que Personnage et
+     Grimoire). Chaque ligne (portrait rond, nom, occupation, faction/lieu) ouvre au tap une popup
+     portrait agrandi (`ui.codexPreview`, `data-action="open-codex-preview"`), même principe
+     d'animation enter/leave que la popup de détail de sort du Grimoire.
 
 ## Personnages (Calix / Deneor)
 
@@ -468,7 +381,7 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
 `cloneDeep()`, un round-trip JSON) pour permettre un aller-retour explicite :
 
 - **Gestion des personnages** (`renderSettingsLoadCharacter()`, `view: 'settings-load-character'`,
-  troisième bouton du menu Paramètres — le header de la page garde le titre "Charger un
+  deuxième bouton du menu Paramètres — le header de la page garde le titre "Charger un
   personnage") — carrousel plein écran (un personnage affiché à la fois, portrait + nom +
   sous-titre + niveau si défini, les deux personnages ont un niveau depuis juillet 2026) avec
   navigation par flèches
@@ -504,8 +417,8 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
   depuis l'app elle-même via cette synchro Drive (contrairement aux valeurs par défaut codées en
   dur, voir section Outil admin plus bas).
   Le Grimoire affiché dépend de `state.activeCharacterId` (`activeSpellbook()`, voir section
-  Grimoire plus haut) : charger Deneor bascule sur `DENEOR_SPELLBOOK` et son système de
-  préparation de sorts, indépendant du contenu de Calix.
+  Grimoire plus haut) : charger Deneor bascule sur `DENEOR_SPELLBOOK`, indépendant du contenu de
+  Calix.
 
 `loadState()` migre automatiquement toute sauvegarde antérieure à ce système (`parsed.characters`
 absent) : le profil unique existant devient l'instantané de Calix (aucune perte de données) et
@@ -660,9 +573,6 @@ toute nouvelle machine doit utiliser le nouveau nom ci-dessus.
 
 ## Reste à faire / pistes non traitées
 
-- Sélecteur connus/préparés pour le Grimoire de Calix : emplacement UI réservé dans
-  `renderSettingsGrimoire()` mais logique non développée (Deneor a son propre système de
-  préparation de sorts, voir section Grimoire plus haut — indépendant de celui-ci).
 - Personnages : système actuellement limité à deux emplacements fixes (Calix/Deneor), pas de CRUD
   générique (ajout/suppression d'un personnage) — voir section Personnages plus haut.
 - Génération d'un `.apk` installable : voie recommandée — passer l'URL GitHub Pages dans

@@ -149,11 +149,13 @@ ex. un tap sur +1 PV — pour forcer un premier `saveState()`, puis relire.)
   (exact > préfixe > contient) ; la barre de niveau (`#grimoireChromeBlock`) est masquée pendant
   la recherche.
 
-**4.3 — Sélecteur de niveau**
-- Étapes : cliquer la flèche droite (`[data-action="grimoire-step"][data-delta="1"]`) plusieurs
-  fois depuis le niveau le plus bas.
-- Attendu : le niveau affiché avance à chaque clic jusqu'au dernier niveau/"Classe", puis la
-  flèche droite devient inactive (pas d'effet au-delà).
+**4.3 — Sélecteur de niveau, avec Tous/Favoris en bornes de la chaîne**
+- Étapes : depuis le mode "Tous", vérifier que la flèche gauche est désactivée et que la flèche
+  droite est active ; cliquer la flèche droite plusieurs fois de suite.
+- Attendu : la flèche droite depuis "Tous" mène au premier niveau (0 ou 1 selon si le personnage a
+  des sorts mineurs) ; le niveau affiché avance ensuite à chaque clic jusqu'à "Classe", puis un
+  clic de plus mène à "Favoris" (flèche droite désactivée une fois sur "Favoris"). Depuis
+  "Favoris", la flèche gauche est active et ramène à "Classe" ; la flèche droite y est désactivée.
 
 **4.4 — Mode "Tous" et "Favoris"**
 - Étapes : cliquer `[data-action="grimoire-tab"][data-tab="tous"]`, puis
@@ -179,7 +181,15 @@ ex. un tap sur +1 PV — pour forcer un premier `saveState()`, puis relire.)
 - Étapes : mesurer (`getBoundingClientRect`) le bouton "Tous" et le bouton "Favoris" dans
   `#grimoireChromeBlock`.
 - Attendu : "Tous" est collé au bord gauche de la carte, "Favoris" au bord droit (mêmes marges que
-  le padding de la carte) ; hauteur des boutons ≈ 58px (44px × 1.33).
+  le padding de la carte) ; hauteur des boutons ≈ 58px. Le bouton central affiche "-" en mode
+  Tous, "Niv.N" pour un niveau, "Classe" ou "Favoris" selon le mode.
+
+**4.8 — Menu déroulant de sélection de niveau**
+- Étapes : cliquer le bouton central (`[data-action="toggle-grimoire-level-menu"]`) pour ouvrir la
+  grille de niveaux.
+- Attendu : la grille apparaît avec un espace visible entre elle et la barre au-dessus (pas
+  collée), cellules assez grandes pour être tapées confortablement (~46px de haut) ; cliquer une
+  entrée sélectionne ce niveau et referme le menu.
 
 ---
 

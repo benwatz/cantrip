@@ -109,9 +109,6 @@
   @media (pointer: coarse) {
     .hscroll { flex-wrap: wrap; overflow-x: visible; }
   }
-  .badge { flex: none; width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; user-select: none; }
-  .badge-used { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.45); color: var(--accent-red-text); font-weight: 600; }
-  .badge-available { background: rgba(34,197,94,0.16); border: 1px solid rgba(34,197,94,0.5); color: var(--accent-green-text); font-weight: 700; }
   .toggle-track { width: 40px; height: 24px; border-radius: 12px; position: relative; cursor: pointer; flex: none; transition: background 150ms; }
   .toggle-knob { width: 18px; height: 18px; border-radius: 9px; background: var(--ink-bright); position: absolute; top: 3px; transition: left 150ms; }
   input:disabled { opacity: 0.45; }
@@ -792,11 +789,9 @@
     shortRestChecks: { hp: false, spells: false, tempHp: false, classResource: false, counters: false },
     statsSearch: '',
     codexSearch: '',
-    grimoireLevelFilters: null, // { [niveau numérique (0..9) | 'classe']: bool } ; null = pas encore initialisé (équivaut à "tous actifs") — sert renderGrimoireV1(), pas V2
-    grimoireSearch: '', // recherche du Grimoire V2 (renderGrimoireV2) — filtre tous niveaux confondus
-    grimoireLevelMenuOpen: false, // menu déroulant du sélecteur de niveau (Grimoire V2)
-    grimoireTab: 0, // Grimoire V2 uniquement : niveau numérique (0..9), 'classe', 'tous' ou 'favoris'
-    grimoireFilters: { action: false, bonus: false, reaction: false }, // conservés entre les filtres de niveau
+    grimoireSearch: '', // recherche du Grimoire (renderGrimoire) — filtre tous niveaux confondus
+    grimoireLevelMenuOpen: false, // menu déroulant du sélecteur de niveau
+    grimoireTab: 0, // niveau numérique (0..9), 'classe', 'tous' ou 'favoris'
     settingsLevelError: '',
     settingsCharacterEditing: false, // verrouille/déverrouille Paramétrer le Personnage
     settingsCharacterDraft: null, // copie de travail du profil pendant l'édition ; committée par "Valider"
@@ -818,7 +813,7 @@
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
-    spellDetail: null, // null | { spell, levelTag, leaving: bool } — popup d'infos complètes au tap sur un sort du Grimoire (pas en mode Préparation, où le tap sert à (dé)préparer)
+    spellDetail: null, // null | { spell, levelTag, leaving: bool } — popup d'infos complètes au tap sur un sort du Grimoire
     spellDetailEnterPending: false // true juste après déclenchement ; consommé une fois par render()
   };
 
@@ -1066,8 +1061,7 @@
     return null;
   }
 
-  // Styles de badge par préfixe de type de sort — source unique aussi pour les chips de filtre
-  // (GRIMOIRE_FILTERS ci-dessous), qui reprenaient ces mêmes couleurs en dur.
+  // Styles de badge par préfixe de type de sort (Action/Bonus/Réaction...).
   var SPELL_TYPE_STYLES = {
     ACTION: 'background:rgba(125,211,252,0.16);border:1px solid rgba(125,211,252,0.45);color:var(--accent-blue-text);',
     BONUS: 'background:rgba(34,197,94,0.16);border:1px solid rgba(34,197,94,0.45);color:var(--accent-green-text);',
@@ -1157,7 +1151,7 @@
   function renderPage() {
     switch (ui.view) {
       case 'stats': return renderStats();
-      case 'grimoire': return renderGrimoireV2();
+      case 'grimoire': return renderGrimoire();
       case 'settings': return renderSettings();
       case 'settings-character': return renderSettingsCharacter();
       case 'settings-load-character': return renderSettingsLoadCharacter();
@@ -1523,60 +1517,7 @@
     return tab === 'classe' ? 'Classe' : String(tab);
   }
 
-  // Lazy-init : au premier rendu (ou dès qu'un nouveau niveau apparaît, ex. activation d'un
-  // niveau d'emplacement de sort dans Paramètres), tous les filtres de niveau démarrent actifs —
-  // équivalent visuel à "Tous" sélectionné, pour afficher le Grimoire au complet par défaut.
-  function ensureGrimoireLevelFilters(tabs) {
-    if (!ui.grimoireLevelFilters) ui.grimoireLevelFilters = {};
-    tabs.forEach(function (t) {
-      if (!(t in ui.grimoireLevelFilters)) ui.grimoireLevelFilters[t] = true;
-    });
-  }
-
-  var GRIMOIRE_FILTERS = [
-    { key: 'action', label: 'Action', prefix: 'ACTION', style: SPELL_TYPE_STYLES.ACTION },
-    { key: 'bonus', label: 'Bonus', prefix: 'BONUS', style: SPELL_TYPE_STYLES.BONUS },
-    { key: 'reaction', label: 'Réaction', prefix: 'RÉACTION', style: SPELL_TYPE_STYLES['RÉACTION'] }
-  ];
-
-  function spellMatchesGrimoireFilters(spell) {
-    var activeFilters = GRIMOIRE_FILTERS.filter(function (f) { return ui.grimoireFilters[f.key]; });
-    if (!activeFilters.length) return true;
-    var t = spell.type.toUpperCase();
-    return activeFilters.some(function (f) { return t.indexOf(f.prefix) === 0; });
-  }
-
-  function renderGrimoireSection(section, spells) {
-    var rowsHtml = spells.map(function (spell, i) {
-      // Le tap sur une ligne ouvre la popup de détail (renderSpellDetailModal()) pour lire le nom/
-      // la description sans troncature.
-      var rowAction = 'data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '"';
-      return '<div ' + rowAction +
-        ' style="padding:11px 14px;background:' + (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)') + ';border-bottom:1px solid rgba(var(--border-tint),0.14);cursor:pointer">' +
-        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
-          '<div style="display:flex;align-items:center;gap:6px;min-width:0">' +
-            '<div style="font-size:14px;font-weight:700;color:var(--text-main);font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(spell.name) + '</div>' +
-          '</div>' +
-          '<div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
-            '<div style="display:flex;align-items:center;gap:5px">' +
-              '<div style="background:rgba(var(--border-tint),0.12);border:1px solid rgba(var(--border-tint),0.32);color:var(--text-chip);padding:2px 6px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">' + escapeHtml(section.levelTag) + '</div>' +
-              '<div style="' + spellBadgeStyle(spell.type) + 'padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:0.03em;white-space:nowrap">' + escapeHtml(spell.type) + '</div>' +
-            '</div>' +
-            '<div style="font-size:10px;color:var(--text-muted);white-space:nowrap">' + escapeHtml(spell.range) + '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div style="font-size:12.5px;color:var(--text-desc);margin-top:6px;line-height:1.4">' + escapeHtml(spell.desc) + '</div>' +
-        (spell.note ? '<div style="font-size:11px;color:var(--text-note);font-style:italic;margin-top:4px;line-height:1.3">' + escapeHtml(spell.note) + '</div>' : '') +
-      '</div>';
-    }).join('');
-
-    return '<div style="display:flex;flex-direction:column;gap:6px">' +
-      '<div style="font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">' + escapeHtml(section.title) + '</div>' +
-      '<div style="display:flex;flex-direction:column;border-radius:12px;overflow:hidden;border:1px solid rgba(var(--border-tint),0.2)">' + rowsHtml + '</div>' +
-    '</div>';
-  }
-
-  // Popup de détail d'un sort (tap sur une ligne du Grimoire hors mode Préparation) — même
+  // Popup de détail d'un sort (tap sur une ligne du Grimoire) — même
   // principe enter/leave animé que le portrait agrandi du Codex (ui.spellDetail.leaving +
   // render() immédiat, puis un setTimeout dont la durée matche l'animation CSS de sortie avant de
   // vider l'état pour de bon). Reprend les mêmes informations que la ligne (nom, niveau, type,
@@ -1606,12 +1547,12 @@
     '</div>';
   }
 
-  // Ligne de sort du Grimoire V2 : identique à renderGrimoireSection (V1/Préparation) — même tap
-  // sur la ligne pour ouvrir la popup de détail (data-action="open-spell-detail") — mais avec une
-  // étoile de favori en plus, à gauche du nom. Le clic sur l'étoile stoppe la propagation dans le
-  // handler 'toggle-favorite-spell' pour ne pas aussi ouvrir la popup de détail (les deux éléments
-  // ont chacun leur propre data-action, donc chacun son propre listener de clic).
-  function renderGrimoireSectionV2(section, spells) {
+  // Ligne de sort du Grimoire : tap sur la ligne pour ouvrir la popup de détail
+  // (data-action="open-spell-detail"), plus une étoile de favori à gauche du nom. Le clic sur
+  // l'étoile stoppe la propagation dans le handler 'toggle-favorite-spell' pour ne pas aussi
+  // ouvrir la popup de détail (les deux éléments ont chacun leur propre data-action, donc chacun
+  // son propre listener de clic).
+  function renderGrimoireSection(section, spells) {
     var rowsHtml = spells.map(function (spell, i) {
       var favorited = profile().favoriteSpells.indexOf(spell.name) !== -1;
       return '<div data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '" style="padding:11px 14px;background:' + (i % 2 ? 'var(--bg-card-alt)' : 'var(--bg-card)') + ';border-bottom:1px solid rgba(var(--border-tint),0.14);cursor:pointer">' +
@@ -1639,85 +1580,13 @@
     '</div>';
   }
 
-  // Onglets de niveau devenus des filtres combinables (juillet 2026, remplace la sélection
-  // exclusive à un seul niveau) : chaque chip togglé indépendamment se combine en OR avec les
-  // autres (même principe que GRIMOIRE_FILTERS). "Tous" (data-action=
-  // "toggle-grimoire-level-all") n'est pas un niveau parmi d'autres mais un raccourci maître :
-  // actif seulement quand tous les niveaux le sont, il les active/désactive tous d'un coup.
-  function grimoireTabsHtml(tabs) {
-    var allActive = tabs.every(function (t) { return !!ui.grimoireLevelFilters[t]; });
-    var allChipHtml = '<div data-action="toggle-grimoire-level-all" style="flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
-      (allActive
-        ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);'
-        : 'background:transparent;border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
-      '">Tous</div>';
-    var tabsHtml = tabs.map(function (tab) {
-      var active = !!ui.grimoireLevelFilters[tab];
-      return '<div data-action="toggle-grimoire-level" data-tab="' + tab + '" style="flex:none;min-width:38px;height:32px;padding:0 10px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;user-select:none;' +
-        (active
-          ? 'background:rgba(var(--border-tint),0.28);border:1px solid var(--border-strong);color:var(--text-gold);'
-          : 'background:transparent;border:1px solid rgba(var(--border-tint),0.2);color:var(--text-dim);') +
-        '">' + escapeHtml(grimoireTabLabel(tab)) +
-        '</div>';
-    }).join('');
-    return allChipHtml + tabsHtml;
-  }
-
-  // V1 (filtres de niveau combinables) — conservée intacte mais non appelée depuis cette
-  // réorganisation, remplacée par renderGrimoireV2() ci-dessous (recherche + sélecteur
-  // -/niveau/+/dropdown + favoris). Pour revenir à V1 : dans renderPage(), remplacer l'appel à
-  // renderGrimoireV2() par renderGrimoireV1().
-  function renderGrimoireV1() {
-    var tabs = grimoireTabs();
-    ensureGrimoireLevelFilters(tabs);
-
-    var tabsHtml = grimoireTabsHtml(tabs);
-
-    var filterChipsHtml = GRIMOIRE_FILTERS.map(function (f) {
-      var active = !!ui.grimoireFilters[f.key];
-      return '<div data-action="toggle-grimoire-filter" data-filter="' + f.key + '" style="flex:none;height:26px;padding:0 10px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:0.02em;cursor:pointer;user-select:none;' +
-        (active ? f.style : 'background:transparent;border:1px solid rgba(var(--border-tint),0.25);color:var(--text-dim);') +
-        '">' + escapeHtml(f.label) + '</div>';
-    }).join('');
-
-    var activeLevels = tabs.filter(function (t) { return ui.grimoireLevelFilters[t]; });
-    var matchingSections = activeSpellbook().sections.filter(function (s) { return ui.grimoireLevelFilters[s.level]; });
-    var sectionsWithSpells = matchingSections.map(function (s) {
-      return { section: s, spells: s.spells.filter(spellMatchesGrimoireFilters) };
-    }).filter(function (x) { return x.spells.length > 0; });
-    var totalSpellsAtLevel = matchingSections.reduce(function (sum, s) { return sum + s.spells.length; }, 0);
-
-    var contentHtml;
-    if (!activeLevels.length) {
-      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Sélectionnez au moins un niveau.</div>';
-    } else if (sectionsWithSpells.length) {
-      contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSection(x.section, x.spells); }).join('<div style="height:14px"></div>');
-    } else if (totalSpellsAtLevel === 0) {
-      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort à ce niveau.</div>';
-    } else {
-      contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort ne correspond aux filtres sélectionnés.</div>';
-    }
-
-    return (
-      '<div style="display:flex;flex-direction:column;height:100%;gap:12px;position:relative">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;flex:none;gap:8px">' +
-          '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px" class="font-cinzel">Grimoire</div>' +
-          '<div style="display:flex;gap:6px">' + filterChipsHtml + '</div>' +
-        '</div>' +
-        '<div class="hscroll" style="flex:none;display:flex;gap:8px;overflow-x:auto;padding-bottom:2px">' + tabsHtml + '</div>' +
-        '<div id="grimoireSwipe" data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding-bottom:4px">' + contentHtml + '</div>' +
-      '</div>'
-    );
-  }
-
-  // V2 — recherche pleine largeur (même pattern que #statsSearchInput), sélecteur de niveau à
-  // trois zones ( - / "Niveau N" cliquable / + ) plutôt que les filtres de niveau combinables de
-  // V1, encadré par deux boutons "Tous" et "Favoris" (étoile), et favoris par sort (étoile par
-  // ligne, persistée dans profile().favoriteSpells). N'utilise pas
-  // ui.grimoireLevelFilters (propre à V1) : ui.grimoireTab est un état dédié à V2, qui
-  // accepte en plus des niveaux réels 'tous'/'favoris' (jamais renvoyés par grimoireTabs(), qui
-  // reste la seule source pour le cycle -/+ et le menu déroulant : niveaux réels + 'classe').
-  function renderGrimoireV2() {
+  // Recherche pleine largeur (même pattern que #statsSearchInput), sélecteur de niveau à trois
+  // zones ( - / "Niveau N" cliquable / + ) encadré par deux boutons "Tous" et "Favoris" (étoile),
+  // et favoris par sort (étoile par ligne, persistée dans profile().favoriteSpells).
+  // ui.grimoireTab est l'état du niveau sélectionné : il accepte en plus des niveaux réels
+  // 'tous'/'favoris' (jamais renvoyés par grimoireTabs(), qui reste la seule source pour le cycle
+  // -/+ et le menu déroulant : niveaux réels + 'classe').
+  function renderGrimoire() {
     var levelTabs = grimoireTabs();
     var mode = ui.grimoireTab;
     if (levelTabs.indexOf(mode) === -1 && mode !== 'tous' && mode !== 'favoris') mode = ui.grimoireTab = levelTabs[0];
@@ -1756,7 +1625,7 @@
 
     var contentHtml;
     if (sectionsWithSpells.length) {
-      contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSectionV2(x.section, x.spells); }).join('<div style="height:14px"></div>');
+      contentHtml = sectionsWithSpells.map(function (x) { return renderGrimoireSection(x.section, x.spells); }).join('<div style="height:14px"></div>');
     } else if (searching) {
       contentHtml = '<div style="padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim)">Aucun sort ne correspond à « ' + escapeHtml(searchQuery) + ' ».</div>';
     } else if (mode === 'favoris' && baseCount === 0) {
@@ -2896,26 +2765,6 @@
           if (x.level >= disableFrom) x.enabled = false;
         });
         ui.disableLevelDialog = null;
-        render();
-        break;
-      }
-      case 'toggle-grimoire-level': {
-        var tabValue = e.currentTarget.getAttribute('data-tab');
-        var levelKey = tabValue === 'classe' ? 'classe' : parseInt(tabValue, 10);
-        ui.grimoireLevelFilters[levelKey] = !ui.grimoireLevelFilters[levelKey];
-        render();
-        break;
-      }
-      case 'toggle-grimoire-level-all': {
-        var allTabs = grimoireTabs();
-        var allActive = allTabs.every(function (t) { return !!ui.grimoireLevelFilters[t]; });
-        allTabs.forEach(function (t) { ui.grimoireLevelFilters[t] = !allActive; });
-        render();
-        break;
-      }
-      case 'toggle-grimoire-filter': {
-        var filterKey = e.currentTarget.getAttribute('data-filter');
-        ui.grimoireFilters[filterKey] = !ui.grimoireFilters[filterKey];
         render();
         break;
       }
