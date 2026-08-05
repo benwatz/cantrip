@@ -859,7 +859,9 @@
     settingsCharacterDraft: null, // copie de travail du profil pendant l'édition ; committée par "Valider"
     settingsGrimoireEditing: false, // verrouille/déverrouille Paramétrer le Grimoire
     settingsGrimoireDraft: null, // copie de travail de state.characters[activeCharacterId].grimoire pendant l'édition
-    settingsGrimoireCollapsed: {}, // { [sectionIndex]: bool } — replié par défaut à false, réinitialisé à chaque entrée en édition
+    settingsGrimoireCollapsed: {}, // { [sectionIndex]: bool } — undefined/true = repliée (défaut, pour éviter un mur de sorts à l'ouverture), false = explicitement dépliée par l'utilisateur ; réinitialisé à chaque entrée en édition
+    grimoireSpellEdit: null, // null | { sectionIndex, spellIndex, leaving: bool } — popup d'édition d'un sort dans "Paramétrer le Grimoire" (remplace l'ancien formulaire inline par sort)
+    grimoireSpellEditEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     disableLevelDialog: null, // { level: number } quand la confirmation de désactivation est ouverte
     characterCarouselIndex: 0, // index dans state.characterOrder, propre à l'écran "Charger un personnage"
     characterCarouselAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderSettingsLoadCharacter()
@@ -1325,6 +1327,9 @@
     if (ui.spellDetail) {
       app.insertAdjacentHTML('beforeend', renderSpellDetailModal());
     }
+    if (ui.grimoireSpellEdit) {
+      app.insertAdjacentHTML('beforeend', renderGrimoireSpellEditModal());
+    }
     var nextScroller = app.querySelector('[data-scroll-root]');
     if (nextScroller) nextScroller.scrollTop = scrollTop;
     bindEvents(focusedSearchId);
@@ -1669,6 +1674,57 @@
         '<div style="font-size:12.5px;color:var(--text-muted)">' + escapeHtml(spell.range) + '</div>' +
         '<div style="font-size:14px;color:var(--text-desc);line-height:1.5">' + escapeHtml(spell.desc) + '</div>' +
         (spell.note ? '<div style="font-size:12.5px;color:var(--text-note);font-style:italic;line-height:1.4;border-top:1px solid rgba(var(--border-tint),0.16);padding-top:10px">' + escapeHtml(spell.note) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  // Popup d'édition d'un sort dans "Paramétrer le Grimoire" (tap sur une ligne compacte pendant
+  // l'édition, ui.grimoireSpellEdit). Même gabarit visuel et même animation enter/leave que
+  // renderSpellDetailModal (réutilise les classes CSS spell-detail-backdrop/-card), mais contient
+  // de vrais champs de saisie — donc, contrairement à la popup de lecture, le fond n'a volontairement
+  // pas de data-action="close..." (un tap dans un champ bulle jusqu'au fond et le fermerait sinon,
+  // aucun stopPropagation ne rattraperait ça) : fermeture uniquement via la croix ou le bouton
+  // "Terminé", même convention que les modales Créer/Supprimer un personnage. Les champs réutilisent
+  // tels quels les data-action grimoire-spell-name/-type/-range/-desc/-note déjà câblés dans
+  // bindEvents() pour le formulaire inline historique — bindEvents() est ré-exécuté après l'ajout de
+  // cette popup au DOM (voir render()), donc ces listeners s'attachent aussi à ses champs.
+  function renderGrimoireSpellEditModal() {
+    var st = ui.grimoireSpellEdit;
+    var g = settingsGrimoireData();
+    var section = g.sections[st.sectionIndex];
+    var spell = section && section.spells[st.spellIndex];
+    if (!spell) return '';
+    var entering = ui.grimoireSpellEditEnterPending;
+    ui.grimoireSpellEditEnterPending = false;
+    var leaving = st.leaving;
+    var backdropAnim = leaving ? 'spell-detail-backdrop-leave' : (entering ? 'spell-detail-backdrop-enter' : '');
+    var cardAnim = leaving ? 'spell-detail-card-leave' : (entering ? 'spell-detail-card-enter' : '');
+    var sIdx = st.sectionIndex, spIdx = st.spellIndex;
+    return '<div class="spell-detail-backdrop ' + backdropAnim + '">' +
+      '<div class="spell-detail-card ' + cardAnim + '">' +
+        '<div style="display:flex;align-items:flex-start;gap:10px">' +
+          '<input type="text" data-action="grimoire-spell-name" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.name) + '" placeholder="Nom du sort" style="flex:1;min-width:0;height:38px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;font-weight:700;padding:0 10px;box-sizing:border-box;font-family:\'Cinzel\',serif"/>' +
+          '<div data-action="close-grimoire-spell-edit" style="flex:none;width:32px;height:32px;border-radius:16px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.3);display:flex;align-items:center;justify-content:center;color:var(--text-main);cursor:pointer">' + iconClose() + '</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+            '<label style="font-size:10px;color:var(--text-muted)">Type</label>' +
+            '<input type="text" data-action="grimoire-spell-type" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.type) + '" placeholder="ACTION, BONUS…" style="width:100%;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:0 8px;box-sizing:border-box"/>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+            '<label style="font-size:10px;color:var(--text-muted)">Portée</label>' +
+            '<input type="text" data-action="grimoire-spell-range" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.range) + '" placeholder="9m · Conc. 1 min" style="width:100%;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:0 8px;box-sizing:border-box"/>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+          '<label style="font-size:10px;color:var(--text-muted)">Description</label>' +
+          '<textarea data-action="grimoire-spell-desc" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Effet du sort" style="width:100%;min-height:80px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;padding:8px 10px;box-sizing:border-box;font-family:inherit;line-height:1.4;resize:vertical">' + escapeHtml(spell.desc) + '</textarea>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+          '<label style="font-size:10px;color:var(--text-muted)">Note d\'usage</label>' +
+          '<textarea data-action="grimoire-spell-note" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Conseil d\'utilisation" style="width:100%;min-height:52px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:8px 10px;box-sizing:border-box;font-family:inherit;font-style:italic;line-height:1.4;resize:vertical">' + escapeHtml(spell.note) + '</textarea>' +
+        '</div>' +
+        '<div data-action="close-grimoire-spell-edit" style="flex:none;height:44px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Terminé</div>' +
       '</div>' +
     '</div>';
   }
@@ -2079,7 +2135,8 @@
     var sectionsHtml = g.sections.map(function (section, sIdx) {
       var isFirst = sIdx === 0;
       var isLast = sIdx === g.sections.length - 1;
-      var collapsed = !!ui.settingsGrimoireCollapsed[sIdx];
+      // Repliée par défaut (undefined/true) — seul un dépliage explicite (false) montre la liste.
+      var collapsed = ui.settingsGrimoireCollapsed[sIdx] !== false;
 
       var sectionReorderHtml =
         '<div style="flex:none;display:flex;flex-direction:column;gap:2px;' + lockedRowStyle + '">' +
@@ -2087,6 +2144,11 @@
           '<div data-action="move-grimoire-section-down" data-section-index="' + sIdx + '" style="width:22px;height:17px;border-radius:0 0 5px 5px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.3);border-top:none;color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (isLast ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9660;</div>' +
         '</div>';
 
+      // Ligne compacte par sort (nom + type/portée en résumé) : le formulaire complet (nom, type,
+      // portée, description, note) vit désormais dans une popup dédiée (renderGrimoireSpellEditModal)
+      // ouverte au tap, plutôt que dans un pavé de champs empilé ici — évite le mur de champs qui
+      // rendait la page illisible dès qu'une section avait plus de deux ou trois sorts. Hors édition,
+      // le tap réutilise la popup de détail en lecture seule déjà utilisée par le Grimoire du joueur.
       var spellsHtml = section.spells.map(function (spell, spIdx) {
         var spIsFirst = spIdx === 0;
         var spIsLast = spIdx === section.spells.length - 1;
@@ -2095,30 +2157,20 @@
             '<div data-action="move-grimoire-spell-up" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="width:22px;height:17px;border-radius:5px 5px 0 0;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (spIsFirst ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9650;</div>' +
             '<div data-action="move-grimoire-spell-down" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="width:22px;height:17px;border-radius:0 0 5px 5px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-top:none;color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (spIsLast ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9660;</div>' +
           '</div>';
-        return '<div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--bg-deep);border-radius:10px;border:1px solid rgba(var(--border-tint),0.16)">' +
-          '<div style="display:flex;align-items:center;gap:8px">' +
-            spellReorderHtml +
-            '<input type="text" data-action="grimoire-spell-name" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.name) + '" placeholder="Nom du sort" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;font-weight:600;padding:0 10px;box-sizing:border-box"/>' +
-            '<div data-action="remove-grimoire-spell" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
+        var summary = [spell.type, spell.range].filter(function (part) { return part; }).join(' · ');
+        var openAttrs = locked
+          ? 'data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '"'
+          : 'data-action="open-grimoire-spell-edit" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '"';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-deep);border-radius:10px;border:1px solid rgba(var(--border-tint),0.16)">' +
+          spellReorderHtml +
+          '<div ' + openAttrs + ' style="flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:2px 0">' +
+            (spell.name
+              ? '<div style="font-size:13px;font-weight:700;color:var(--text-main);font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(spell.name) + '</div>'
+              : '<div style="font-size:13px;font-weight:700;font-style:italic;color:var(--text-dim)">Sans nom</div>') +
+            (summary ? '<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(summary) + '</div>' : '') +
           '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
-              '<label style="font-size:10px;color:var(--text-muted)">Type</label>' +
-              '<input type="text" data-action="grimoire-spell-type" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.type) + '" placeholder="ACTION, BONUS…" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:34px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
-            '</div>' +
-            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
-              '<label style="font-size:10px;color:var(--text-muted)">Portée</label>' +
-              '<input type="text" data-action="grimoire-spell-range" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.range) + '" placeholder="9m · Conc. 1 min" ' + (locked ? 'disabled' : '') + ' style="width:100%;height:34px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
-            '</div>' +
-          '</div>' +
-          '<div style="display:flex;flex-direction:column;gap:4px">' +
-            '<label style="font-size:10px;color:var(--text-muted)">Description</label>' +
-            '<textarea data-action="grimoire-spell-desc" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Effet du sort" ' + (locked ? 'disabled' : '') + ' style="width:100%;min-height:52px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:6px 8px;box-sizing:border-box;font-family:inherit;resize:vertical">' + escapeHtml(spell.desc) + '</textarea>' +
-          '</div>' +
-          '<div style="display:flex;flex-direction:column;gap:4px">' +
-            '<label style="font-size:10px;color:var(--text-muted)">Note d\'usage</label>' +
-            '<textarea data-action="grimoire-spell-note" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Conseil d\'utilisation" ' + (locked ? 'disabled' : '') + ' style="width:100%;min-height:40px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:6px 8px;box-sizing:border-box;font-family:inherit;font-style:italic;resize:vertical">' + escapeHtml(spell.note) + '</textarea>' +
-          '</div>' +
+          '<div style="flex:none;color:var(--text-dim);display:flex">' + iconChevronRight(14) + '</div>' +
+          '<div data-action="remove-grimoire-spell" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
         '</div>';
       }).join('');
 
@@ -2127,20 +2179,25 @@
         '<option value="classe"' + (section.level === 'classe' ? ' selected' : '') + '>Classe</option>' +
       '</select>';
 
+      var countBadgeHtml = collapsed
+        ? '<div style="flex:none;background:rgba(var(--border-tint),0.12);border:1px solid rgba(var(--border-tint),0.32);color:var(--text-chip);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap">' + section.spells.length + (section.spells.length > 1 ? ' sorts' : ' sort') + '</div>'
+        : '';
+
       return '<div style="display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid rgba(var(--border-tint),0.2)">' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           sectionReorderHtml +
           '<div data-action="toggle-grimoire-section-collapse" data-section-index="' + sIdx + '" style="flex:none;width:34px;height:34px;border-radius:8px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);transform:rotate(' + (collapsed ? '0' : '90') + 'deg);transition:transform 0.15s">' + iconChevronRight(16) + '</div>' +
           '<input type="text" data-action="grimoire-section-title" data-section-index="' + sIdx + '" value="' + escapeHtml(section.title) + '" placeholder="Titre de section" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;font-weight:600;padding:0 10px;box-sizing:border-box"/>' +
+          countBadgeHtml +
           '<div data-action="remove-grimoire-section" data-section-index="' + sIdx + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
         '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-          '<label style="font-size:11px;color:var(--text-muted)">Étiquette</label>' +
-          '<input type="text" data-action="grimoire-section-level-tag" data-section-index="' + sIdx + '" value="' + escapeHtml(section.levelTag) + '" placeholder="Niv. 1" maxlength="16" ' + (locked ? 'disabled' : '') + ' style="width:90px;height:34px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
-          '<label style="font-size:11px;color:var(--text-muted)">Niveau</label>' +
-          levelSelectHtml +
-        '</div>' +
         (collapsed ? '' :
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<label style="font-size:11px;color:var(--text-muted)">Étiquette</label>' +
+            '<input type="text" data-action="grimoire-section-level-tag" data-section-index="' + sIdx + '" value="' + escapeHtml(section.levelTag) + '" placeholder="Niv. 1" maxlength="16" ' + (locked ? 'disabled' : '') + ' style="width:90px;height:34px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
+            '<label style="font-size:11px;color:var(--text-muted)">Niveau</label>' +
+            levelSelectHtml +
+          '</div>' +
           (section.spells.length ? '<div style="display:flex;flex-direction:column;gap:8px">' + spellsHtml + '</div>' : '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:8px 0">Aucun sort dans cette section.</div>') +
           '<div data-action="add-grimoire-spell" data-section-index="' + sIdx + '" style="height:40px;border-radius:10px;background:var(--bg-deep);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;' + lockedRowStyle + '">+ Ajouter un sort</div>'
         ) +
@@ -2914,6 +2971,7 @@
         if (ui.view === 'settings-grimoire' && ui.settingsGrimoireEditing) {
           ui.settingsGrimoireEditing = false;
           ui.settingsGrimoireDraft = null;
+          ui.grimoireSpellEdit = null;
         }
         ui.view = e.currentTarget.getAttribute('data-view');
         if (ui.view === 'settings' && ui.githubDeployInfo.status === 'idle') {
@@ -3003,6 +3061,7 @@
       case 'cancel-edit-grimoire':
         ui.settingsGrimoireEditing = false;
         ui.settingsGrimoireDraft = null;
+        ui.grimoireSpellEdit = null;
         render();
         break;
       case 'confirm-edit-grimoire':
@@ -3010,12 +3069,17 @@
         state.characters[state.activeCharacterId].grimoire = ui.settingsGrimoireDraft;
         ui.settingsGrimoireEditing = false;
         ui.settingsGrimoireDraft = null;
+        ui.grimoireSpellEdit = null;
         saveState();
         render();
         break;
 
       case 'add-grimoire-section': {
-        settingsGrimoireData().sections.push(makeGrimoireSection());
+        var newSectionSections = settingsGrimoireData().sections;
+        newSectionSections.push(makeGrimoireSection());
+        // Une section fraîchement créée démarre dépliée (contrairement au défaut replié) pour que
+        // l'utilisateur puisse la remplir tout de suite sans devoir d'abord la dérouler.
+        ui.settingsGrimoireCollapsed[newSectionSections.length - 1] = false;
         render();
         break;
       }
@@ -3047,13 +3111,22 @@
       }
       case 'toggle-grimoire-section-collapse': {
         var collapseIdx = e.currentTarget.getAttribute('data-section-index');
-        ui.settingsGrimoireCollapsed[collapseIdx] = !ui.settingsGrimoireCollapsed[collapseIdx];
+        // Une simple négation ne suffit pas : le défaut est désormais "repliée" (undefined ET true
+        // signifient toutes deux repliée), donc il faut explicitement basculer entre les deux états
+        // réels plutôt que nier une valeur qui vaut déjà true par défaut.
+        var wasCollapsed = ui.settingsGrimoireCollapsed[collapseIdx] !== false;
+        ui.settingsGrimoireCollapsed[collapseIdx] = wasCollapsed ? false : true;
         render();
         break;
       }
       case 'add-grimoire-spell': {
         var addSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
-        settingsGrimoireData().sections[addSpellSectionIdx].spells.push(makeGrimoireSpell());
+        var addSpellSpells = settingsGrimoireData().sections[addSpellSectionIdx].spells;
+        addSpellSpells.push(makeGrimoireSpell());
+        // Ouvre directement la popup d'édition du sort tout juste créé — sinon il n'apparaîtrait
+        // que comme une ligne compacte "Nouveau sort" sans invite claire à la compléter.
+        ui.grimoireSpellEdit = { sectionIndex: addSpellSectionIdx, spellIndex: addSpellSpells.length - 1, leaving: false };
+        ui.grimoireSpellEditEnterPending = true;
         render();
         break;
       }
@@ -3086,6 +3159,17 @@
         }
         break;
       }
+      case 'open-grimoire-spell-edit': {
+        var openSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var openSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        ui.grimoireSpellEdit = { sectionIndex: openSpellSectionIdx, spellIndex: openSpellIdx, leaving: false };
+        ui.grimoireSpellEditEnterPending = true;
+        render();
+        break;
+      }
+      case 'close-grimoire-spell-edit':
+        startLeavingGrimoireSpellEdit();
+        break;
 
       case 'add-class-resource': {
         settingsCharacterProfile().classResources.push(makeClassResource('Ressource de Classe', 0));
@@ -3606,6 +3690,20 @@
       ui.spellDetail = null;
       render();
     }, SPELL_DETAIL_LEAVE_MS);
+  }
+
+  // ---- popup d'édition d'un sort dans "Paramétrer le Grimoire" ----
+  var grimoireSpellEditRemoveTimer = null;
+
+  function startLeavingGrimoireSpellEdit() {
+    if (!ui.grimoireSpellEdit || ui.grimoireSpellEdit.leaving) return;
+    ui.grimoireSpellEdit.leaving = true;
+    render();
+    clearTimeout(grimoireSpellEditRemoveTimer);
+    grimoireSpellEditRemoveTimer = setTimeout(function () {
+      ui.grimoireSpellEdit = null;
+      render();
+    }, SPELL_DETAIL_LEAVE_MS); // même animation CSS que la popup de détail en lecture
   }
 
   // ---- actions Charger/Sauvegarder (Google Drive), déclenchées après confirmation ----
