@@ -668,11 +668,43 @@ toute nouvelle machine doit utiliser le nouveau nom ci-dessus.
 
 ## Reste à faire / pistes non traitées
 
-- Personnages : le CRUD local (créer/activer/supprimer, août 2026) fonctionne mais reste
-  100% `localStorage` — pas de compte joueur, pas de partage entre appareils/tables pour un
-  personnage créé dynamiquement (seuls Calix/Deneor bénéficient de la synchro Drive `bdd.json`,
-  et seulement si on l'y ajoute explicitement) — voir section Personnages plus haut. Un vrai
-  partage à plusieurs tables demande un backend multi-utilisateur (ex. Firestore), pas encore fait.
+### Plan "personnages partageables à d'autres tables" (en cours, ne pas relancer une planification à zéro)
+
+Objectif porté par l'utilisateur : permettre à d'autres tables/joueurs (inconnus, pas seulement
+Calix/Deneor gérés par l'utilisateur) de créer et gérer leurs propres personnages, sans dépendre du
+compte Google Drive personnel de l'utilisateur (jugé trop faible pour du multi-table : fichier
+unique `bdd.json`, pas d'isolation, écrasement complet, limite d'utilisateurs externes OAuth).
+Diagnostic retenu : Firestore (ou équivalent) est nécessaire pour la vraie isolation entre tables ;
+Drive reste utilisable pour l'usage personnel actuel de l'utilisateur en parallèle. Ordre validé
+avec l'utilisateur (modèle de données + CRUD local **avant** le backend, pour isoler les risques) :
+
+1. ✅ **Grimoire : code → donnée** (fait, commit `b2037a4`) — `state.characters[id].grimoire`
+   éditable en jeu via Paramètres → "Gérer le Grimoire" (éditeur complet sections/sorts), fallback
+   `characterGrimoire()` corrigé pour ne plus retomber sur le grimoire de Calix pour un ID inconnu.
+2. ✅ **CRUD personnages en local** (fait, commit `8dbb1b5`) — `state.characterOrder` dynamique,
+   créer/activer/supprimer un personnage, avatar générique sans portrait. Toujours 100%
+   `localStorage`, aucun partage entre appareils pour un personnage créé dynamiquement.
+3. ⬜ **Modèle Firestore + règles de sécurité** (prochaine étape, pas commencée) — schéma
+   `tables/{code}/characters/{id}` (un doc par personnage, embarque `savedProfile` + `grimoire` tel
+   quel), auth anonyme Firebase + un "code de table" comme clé de partage (le MJ crée une table,
+   les joueurs entrent le code une fois, stocké en `localStorage` comme le personnage actif
+   aujourd'hui), règles de sécurité limitant l'accès aux membres de la table. À concevoir et tester
+   à l'émulateur Firestore **avant** de toucher à `index.html` — c'est la partie la plus risquée
+   (fuite de données entre tables si mal écrite).
+4. ⬜ Brancher Firestore dans l'app — remplacer `driveLoadBdd()`/`driveSaveBdd()` (et leurs
+   équivalents dans `cantrip-admin.html`) par les appels Firestore correspondants, en gardant si
+   possible la même UX (modale de confirmation, `ui.driveBusy`/toast).
+5. ⬜ Migration one-shot des données existantes (`bdd.json` Drive → première table Firestore) pour
+   ne pas perdre Calix/Deneor.
+6. ⬜ Rodage à une table (l'utilisateur seul) puis ouverture à une deuxième table réelle pour
+   vérifier concrètement l'isolation des règles de sécurité, avant partage plus large.
+7. ⬜ (optionnel, plus tard) Retirer le code Drive une fois Firestore stable, incrémenter
+   `CACHE_NAME` dans `sw.js`.
+
+Gratuité vérifiée avec l'utilisateur : oui à cette échelle (Firebase Spark gratuit largement
+suffisant pour quelques tables ; alternative Supabase free tier possible mais se met en pause après
+inactivité, moins adapté à un usage irrégulier).
+
 - Personnages créés dynamiquement : pas de renommage après création, pas d'édition de
   sous-titre/niveau/portrait dans l'UI (contrairement à Calix/Deneor, ces champs n'ont aucun
   formulaire dédié pour l'instant).
