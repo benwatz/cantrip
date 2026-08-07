@@ -620,6 +620,7 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   {
     "rules": {
       "cantrip": {
+        ".read": "auth.uid === '<UID admin>'",
         "_meta": {
           ".read": "auth.uid === '<UID admin>'",
           ".write": "auth.uid === '<UID admin>'"
@@ -658,6 +659,17 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
     }
   }
   ```
+  **Piège corrigé (2026-08-07)** : le `.read` sur `cantrip` lui-même (pas seulement sur ses enfants
+  `_meta`/`$charId`) est nécessaire pour que `fbLoadAccessData()` (`cantrip-admin.html`, panneau
+  "Personnages") puisse lire `fbDb.ref('cantrip').once('value')` et énumérer tous les personnages
+  d'un coup — Firebase RTDB ne fait **pas** remonter automatiquement l'autorisation d'un enfant
+  vers son parent : lire un nœud parent exige une règle `.read` explicite à ce niveau précis, même
+  si l'appelant a accès à tous ses enfants individuellement. Sans cette ligne, ce seul appel
+  échouait et faisait échouer tout le `Promise.all()` de `fbLoadAccessData()` avec lui (panneau
+  "Accès" vide/bloqué en "Chargement…", repéré par l'utilisateur en testant avec un second compte).
+  Ce `.read` reste admin-only : un utilisateur normal ne peut toujours pas lister tous les
+  personnages, seulement lire ceux où `characterAccess/{charId}/{son uid}` est vrai (via la règle
+  `$charId` plus bas, inchangée).
   Trois niveaux de vérification pour lire/écrire un personnage : (1) approuvé globalement
   (`approvedUsers`, flux de demande d'accès inchangé, voir plus bas), (2) admin (bypass complet,
   `auth.uid === '<UID admin>'`) **ou** avoir un accès explicite à ce personnage précis
