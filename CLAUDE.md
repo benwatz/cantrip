@@ -277,7 +277,11 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
      `profile().preparedSpells`, une page dédiée de sélection, un bouton flottant sur le Grimoire
      et une option dans la modale Repos ("Se reposer et préparer des sorts"). Retiré au profit du
      système de favoris ci-dessus — Deneor voit désormais tout son grimoire comme Calix, sans
-     restriction de visibilité par sort.
+     restriction de visibilité par sort. Le champ `preparedSpells` avait survécu plus longtemps
+     dans `cantrip-admin.html` (profils de seed, `sanitizeAdminProfile()`, un champ texte "Sorts
+     préparés" dans le panneau Personnage, `deriveFullProfile()`) sans plus aucun usage réel côté
+     app — retiré de l'outil admin à son tour (2026-08-08) pour que le champ disparaisse
+     entièrement du projet plutôt que de traîner comme donnée morte.
 
 4. **Paramètres** — `renderSettings()` affiche un menu de quatre boutons (`data-action="nav"`,
    réutilise le pattern générique de navigation) qui renvoient chacun vers une sous-page dédiée :

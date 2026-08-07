@@ -591,7 +591,6 @@ var SEED_PROFILES = {
       { name: 'Survie', modifier: 2 },
       { name: 'Tromperie', modifier: 5 }
     ],
-    preparedSpells: [],
     gold: 0
   },
   deneor: {
@@ -635,10 +634,6 @@ var SEED_PROFILES = {
       { name: 'Représentation', modifier: 3 },
       { name: 'Survie', modifier: 4 },
       { name: 'Tromperie', modifier: 3 }
-    ],
-    preparedSpells: [
-      'Bouclier de la foi', 'Cérémonie', 'Châtiment calcinant', 'Châtiment courroucé',
-      'Châtiment tonitruant', 'Détection de la magie', 'Détection du mal et du bien'
     ],
     gold: 0
   }
@@ -711,8 +706,6 @@ function sanitizeAdminProfile(p) {
     if (typeof s.modifier !== 'number' || isNaN(s.modifier)) s.modifier = 0;
     s.modifier = clamp(s.modifier, -99, 99);
   });
-  if (!Array.isArray(p.preparedSpells)) p.preparedSpells = [];
-  else p.preparedSpells = p.preparedSpells.filter(function (n) { return typeof n === 'string'; });
   if (typeof p.gold !== 'number' || isNaN(p.gold)) p.gold = 0;
   p.gold = clamp(Math.round(p.gold), 0, 10000);
   return p;
@@ -1045,12 +1038,6 @@ function renderPersonnage() {
       '</div>';
     }).join('') + '</div></div>';
 
-  var preparedHtml = ui.activeChar === 'deneor'
-    ? '<div class="psec"><div class="psec-label">Sorts préparés (un par ligne)</div>' +
-        '<textarea data-action="p-prepared-spells" rows="6" style="width:100%;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:10px;font-family:inherit;resize:vertical;">' + escapeHtml(p.preparedSpells.join('\n')) + '</textarea>' +
-      '</div>'
-    : '';
-
   var goldHtml = '<div class="psec"><div class="psec-label">Or</div><div class="pgrid3">' +
     pField('Or (PO)', 'p-gold', 'gold', p.gold, false) +
     '</div></div>';
@@ -1058,7 +1045,7 @@ function renderPersonnage() {
   document.getElementById('personPanel').innerHTML =
     '<div class="person-title font-cinzel">Personnage — ' + escapeHtml(CHARACTER_NAMES[ui.activeChar]) + '</div>' +
     hpHtml + combatHtml + togglesHtml + attacksHtml + spellLevelsHtml + classResourcesHtml +
-    abilitiesHtml + savingThrowsHtml + skillsHtml + preparedHtml + goldHtml;
+    abilitiesHtml + savingThrowsHtml + skillsHtml + goldHtml;
 
   bindPersonnageEvents();
 }
@@ -1281,14 +1268,6 @@ function bindPersonnageEvents() {
       saveState(); render();
     });
   });
-
-  var preparedEl = panel.querySelector('[data-action="p-prepared-spells"]');
-  if (preparedEl) {
-    preparedEl.addEventListener('change', function () {
-      p.preparedSpells = preparedEl.value.split('\n').map(function (s) { return s.trim(); }).filter(function (s) { return s; });
-      saveState(); render();
-    });
-  }
 
   panel.querySelectorAll('[data-action="p-gold"]').forEach(function (el) {
     el.addEventListener('change', function () {
@@ -1525,7 +1504,6 @@ function deriveFullProfile(charId) {
     abilityScores: JSON.parse(JSON.stringify(p.abilityScores)),
     savingThrows: JSON.parse(JSON.stringify(p.savingThrows)),
     skills: JSON.parse(JSON.stringify(p.skills)),
-    preparedSpells: p.preparedSpells.slice(),
     gold: p.gold
   };
 }
