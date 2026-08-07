@@ -1586,7 +1586,7 @@ function renderAuthGate() {
   var html;
   if (!authState.user) {
     html = '<div class="gate-card"><div class="gate-title font-cinzel">Cantrip · Admin</div>' +
-      '<p>Cet outil est réservé à l\'administrateur et aux utilisateurs qu\'il a approuvés. Connectez-vous avec votre compte Google pour continuer.</p>' +
+      '<p>Cet outil est réservé aux utilisateurs approuvés. Connectez-vous avec votre compte Google pour continuer.</p>' +
       '<button class="btn primary" id="btnGateSignIn">Se connecter avec Google</button>' +
       (authState.error ? '<div class="gate-error">' + escapeHtml(authState.error) + '</div>' : '') +
       '</div>';
