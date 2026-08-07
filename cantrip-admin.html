@@ -555,6 +555,67 @@ function defaultSkillsAdmin() {
   return SKILL_NAMES.map(function (name) { return { name: name, modifier: 0 }; });
 }
 
+// ---- seed Codex (copie exacte de l'ancien CODEX_PNJ codé en dur dans index.html avant la
+// migration vers Firebase, 2026-08-08) — sert uniquement au bouton "Importer" ci-dessous, pour la
+// toute première publication du Codex sur Firebase depuis cet outil ; index.html ne connaît plus
+// ces données, il les lit désormais depuis le nœud "codex". ----
+var SEED_CODEX_ADMIN = [
+  { prenom: "Methrammar", nom: "Aerasumé", occupation: "Grand Mage", faction: "Alliance des Seigneurs", lieu: "Lunargent", portrait: "npc/methrammar-aerasume.jpg" },
+  { prenom: "Sildar", nom: "Antriver", occupation: "Chevalier, Ambassadeur", faction: "Alliance des Seigneurs", lieu: "Padhiver", portrait: "npc/sildar-antriver.png" },
+  { prenom: "Iarno", nom: "'Bâton de Verre' Albrek", occupation: "Magicien", faction: "Alliance des Seigneurs", lieu: "💀", portrait: "npc/iarno-baton-de-verre-albrek.png" },
+  { prenom: "Darathra", nom: "Shendrel", occupation: "Seigneur Protectrice", faction: "Alliance des Seigneurs", lieu: "Troisangliers", portrait: "npc/darathra-shendrel.png" },
+  { prenom: "Nestra", nom: "Ruthiol", occupation: "Baronne des Eaux", faction: "Alliance des Seigneurs", lieu: "Yartar", portrait: "npc/nestra-ruthiol.jpg" },
+  { prenom: "Daran", nom: "Edermath", occupation: "Aventurier vétéran", faction: "Ordre du Gantelet", lieu: "Voyage", portrait: "npc/daran-edermath.jpg" },
+  { prenom: "Ontharr", nom: "Frume", occupation: "Paladin de Torm", faction: "Ordre du Gantelet", lieu: "Troisangliers", portrait: "npc/ontharr-frume.png" },
+  { prenom: "Leosine", nom: "Erlanthar", occupation: "Espionne", faction: "Ménestrels", lieu: "Voyage", portrait: "npc/leosine-erlanthar.jpg" },
+  { prenom: "Polly", nom: "Morphe", occupation: "Tenancière", faction: "Ménestrels", lieu: "Lunargent", portrait: "npc/polly-morphe.jpg" },
+  { prenom: "Roran", nom: "Balkian", occupation: "Cartographe", faction: "Ménestrels", lieu: "Lunargent", portrait: "npc/roran-balkian.jpg" },
+  { prenom: "Halia", nom: "Thornton", occupation: "Bourgmestre, Chef des Mineurs", faction: "Zhentarim", lieu: "Phandaline", portrait: "npc/halia-thornton.jpg" },
+  { prenom: "'Rouflaquettes'", nom: "", occupation: "Roublard", faction: "Zhentarim", lieu: "Phandaline", portrait: "npc/rouflaquettes.jpg" },
+  { prenom: "Sept", nom: "Saisons", occupation: "Propriétaire de casino", faction: "Zhentarim", lieu: "Lunargent", portrait: "npc/sept-saisons.jpg" },
+  { prenom: "Lila & Grommash", nom: "", occupation: "Primeurs", faction: "Devorare Animas", lieu: "Lunargent", portrait: "npc/lila-grommash.jpg" },
+  { prenom: "Morgana", nom: "", occupation: "Aventurière", faction: "Devorare Animas", lieu: "Lunargent", portrait: "npc/morgana.jpg" },
+  { prenom: "Kresnie", nom: "Tête-de-Lapis", occupation: "Artisan du cuir", faction: "Devorare Animas", lieu: "Yartar", portrait: "npc/kresnie-tete-de-lapis.jpg" },
+  { prenom: "Dralmorrer", nom: "Mornemine", occupation: "Crocdragon", faction: "Culte du Dragon", lieu: "Inconnu", portrait: "npc/dralmorrer-mornemine.png" },
+  { prenom: "Rezmir", nom: "la Noire", occupation: "Voix du Culte", faction: "Culte du Dragon", lieu: "💀", portrait: "npc/rezmir-la-noire.png" },
+  { prenom: "Elmina", nom: "Barthen", occupation: "Marchande", faction: "", lieu: "Phandaline", portrait: "npc/elmina-barthen.jpg" },
+  { prenom: "Qelline", nom: "Aulnefeuille", occupation: "Fermière", faction: "", lieu: "Phandaline", portrait: "npc/qelline-aulnefeuille.jpg" },
+  { prenom: "Linene", nom: "Ventgris", occupation: "Marchande", faction: "Bouclier au Lion", lieu: "Phandaline", portrait: "npc/linene-ventgris.png" },
+  { prenom: "Gundren", nom: "Cherchepierre", occupation: "Marchand, Propriétaire de Mine", faction: "", lieu: "Phandaline", portrait: "npc/gundren-cherchepierre.png" },
+  { prenom: "Toblen", nom: "Rochemont", occupation: "Tenancier", faction: "", lieu: "Phandaline", portrait: "npc/toblen-rochemont.jpg" },
+  { prenom: "Droop", nom: "", occupation: "Chef de clan", faction: "Clan Scraptop", lieu: "Bois de Padhiver", portrait: "npc/droop.png" },
+  { prenom: "Reidoth", nom: "", occupation: "Druide", faction: "Enclave d'Emeraude", lieu: "Bois de Padhiver", portrait: "npc/reidoth.jpg" },
+  { prenom: "Abella", nom: "Lokelani", occupation: "Chevalier", faction: "Compagnons", lieu: "Troisangliers", portrait: "npc/abella-lokelani.jpg" },
+  { prenom: "Fildo", nom: "Affûteplume", occupation: "Barde de Milil", faction: "", lieu: "Troisangliers", portrait: "npc/fildo-affuteplume.jpg" },
+  { prenom: "Gilthur", nom: "Helcral", occupation: "Chevalier", faction: "Poing Enflammé", lieu: "Troisangliers", portrait: "npc/gilthur-helcral.jpg" },
+  { prenom: "Ekemon", nom: "", occupation: "Serveur", faction: "", lieu: "Troisangliers", portrait: "npc/ekemon.jpg" },
+  { prenom: "Kalys", nom: "Tanker", occupation: "Paladin d'Ilmater", faction: "", lieu: "Troisangliers", portrait: "npc/kalys-tanker.jpg" },
+  { prenom: "Morla", nom: "Welby", occupation: "Marchand, Adepte de Waukyne", faction: "", lieu: "Troisangliers", portrait: "npc/morla-welby.jpg" },
+  { prenom: "Griselda", nom: "", occupation: "Fermière", faction: "", lieu: "Troisangliers", portrait: "npc/griselda.jpg" },
+  { prenom: "Oriana", nom: "Keelin", occupation: "Chevalier", faction: "Dragons Pourpres", lieu: "Troisangliers", portrait: "npc/oriana-keelin.jpg" },
+  { prenom: "Varis", nom: "Teinithra", occupation: "Enchanteur", faction: "", lieu: "Troisangliers", portrait: "npc/varis-teinithra.jpg" },
+  { prenom: "Tayla", nom: "Sharrington", occupation: "Garde-Forestière", faction: "", lieu: "Troisangliers", portrait: "npc/tayla-sharrington.jpg" },
+  { prenom: "Aru", nom: "", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/aru.jpg" },
+  { prenom: "Dosla", nom: "", occupation: "Magicienne", faction: "", lieu: "Yartar", portrait: "npc/dosla.jpg" },
+  { prenom: "Gavan", nom: "Ronnad", occupation: "Lieutenant des Boucliers de Yartar", faction: "", lieu: "Yartar", portrait: "npc/gavan-ronnad.jpg" },
+  { prenom: "Hildegarde", nom: "Lakkena", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/hildegarde-lakkena.jpg" },
+  { prenom: "Emil", nom: "Toranescu", occupation: "Chef de bande", faction: "Phalanges de Yartar", lieu: "Yartar", portrait: "npc/emil-toranescu.jpg" },
+  { prenom: "Magrea", nom: "", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/magrea.jpg" },
+  { prenom: "Lalita", nom: "Pétronille", occupation: "Marchande", faction: "", lieu: "Yartar", portrait: "npc/lalita-petronille.jpg" },
+  { prenom: "Urgazir", nom: "", occupation: "Mercenaire", faction: "Uthgardt", lieu: "Yartar", portrait: "npc/urgazir.jpg" },
+  { prenom: "Varana", nom: "'La Pie' Roncecolline", occupation: "Chef de bande", faction: "Phalanges de Yartar", lieu: "Yartar", portrait: "npc/varana-la-pie-roncecolline.jpg" },
+  { prenom: "Elvina", nom: "", occupation: "Farceuse", faction: "Enclave d'Emeraude", lieu: "Féerie", portrait: "npc/elvina.jpg" },
+  { prenom: "Polynomise", nom: "", occupation: "Championne", faction: "Cour de Verenestra", lieu: "Féerie", portrait: "npc/polynomise.jpg" },
+  { prenom: "Aerosclughpalar", nom: "", occupation: "Gardien de la Féerie", faction: "Enclave d'Emeraude", lieu: "Féerie", portrait: "npc/aerosclughpalar.jpg" },
+  { prenom: "Cumillas", nom: "", occupation: "Ivrogne", faction: "", lieu: "Féerie", portrait: "npc/cumillas.jpg" },
+  { prenom: "Meryas", nom: "Dansecoeur", occupation: "Etudiant", faction: "", lieu: "Lunargent", portrait: "npc/meryas-dansecoeur.jpg" },
+  { prenom: "Meriel", nom: "Qualimahar", occupation: "Capitaine de la Légion d'Argent", faction: "", lieu: "Lunargent", portrait: "npc/meriel-qualimahar.jpg" },
+  { prenom: "Thora", nom: "Brisefer", occupation: "Forgeronne", faction: "", lieu: "Lunargent", portrait: "npc/thora-brisefer.jpg" },
+  { prenom: "Nezznar", nom: "l'Araignée Noire", occupation: "Noble", faction: "T'sarran", lieu: "💀", portrait: "npc/nezznar-araignee-noire.png" },
+  { prenom: "Roi", nom: "Grol", occupation: "Roi", faction: "Clan des Dents-Pointues", lieu: "💀", portrait: "npc/roi-grol.jpg" },
+  { prenom: "Wirt", nom: "Ruthiol", occupation: "", faction: "", lieu: "💀", portrait: "npc/wirt-ruthiol.jpg" }
+];
+
 var SEED_PROFILES = {
   calix: {
     hp: { current: 42, max: 42, temp: 0 },
@@ -728,6 +789,8 @@ var ui = {
   accessRequests: null, // null (jamais chargé) | tableau [{ uid, email, name, requestedAt }]
   approvedUsers: null, // null (jamais chargé) | tableau [{ uid, email, name }]
   accessCharacters: null, // null (jamais chargé) | tableau [{ charId, name, ownerUid, accessUids }]
+  codexEntries: null, // null (jamais chargé) | tableau [{ id, prenom, nom, occupation, faction, lieu, portrait }]
+  codexAccessUids: null, // null (jamais chargé) | tableau d'uids ayant accès au Codex dans l'app
   accessBusy: false,
   accessError: null
 };
@@ -1743,7 +1806,10 @@ function fbLoadAccessData() {
       fbDb.ref('approvedUserInfo').once('value'),
       fbDb.ref('cantrip').once('value'),
       fbDb.ref('characterOwners').once('value'),
-      fbDb.ref('characterAccess').once('value')
+      fbDb.ref('characterAccess').once('value'),
+      fbDb.ref('codex').once('value'),
+      fbDb.ref('codexAccess').once('value'),
+      fbDb.ref('codexAccessBootstrapped').once('value')
     ]);
   }).then(function (results) {
     var requestsVal = results[0].val() || {};
@@ -1752,6 +1818,9 @@ function fbLoadAccessData() {
     var cantripVal = results[3].val() || {};
     var ownersVal = results[4].val() || {};
     var accessVal = results[5].val() || {};
+    var codexVal = results[6].val() || {};
+    var codexAccessVal = results[7].val() || {};
+    var codexBootstrapped = results[8].val() === true;
     ui.accessRequests = Object.keys(requestsVal).map(function (uid) {
       var r = requestsVal[uid] || {};
       return { uid: uid, email: r.email || '', name: r.name || '', requestedAt: r.requestedAt || 0 };
@@ -1768,6 +1837,33 @@ function fbLoadAccessData() {
       var accessUids = Object.keys(accessMap).filter(function (uid) { return accessMap[uid] === true; });
       return { charId: charId, name: name, ownerUid: ownersVal[charId] || '', accessUids: accessUids };
     }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    ui.codexEntries = Object.keys(codexVal).map(function (id) {
+      var n = codexVal[id] || {};
+      return { id: id, prenom: n.prenom || '', nom: n.nom || '', occupation: n.occupation || '', faction: n.faction || '', lieu: n.lieu || '', portrait: n.portrait || '' };
+    }).sort(function (a, b) { return (a.prenom + a.nom).localeCompare(b.prenom + b.nom); });
+
+    // Amorçage (une seule fois, jamais recalculé même si l'accès Codex est ensuite retiré à tout
+    // le monde) : accorde l'accès Codex à tous les utilisateurs déjà approuvés au moment où ce
+    // panneau est ouvert pour la première fois après l'ajout de la fonctionnalité. Le sentinel
+    // "codexAccessBootstrapped" (séparé de codexAccess lui-même) est nécessaire car RTDB supprime
+    // silencieusement un nœud devenu vide — sans lui, retirer tout le monde de codexAccess aurait
+    // ré-amorcé l'accès par défaut au chargement suivant.
+    if (!codexBootstrapped) {
+      var defaultUids = Object.keys(approvedVal).filter(function (uid) { return approvedVal[uid] === true; });
+      var writes = { codexAccessBootstrapped: true };
+      defaultUids.forEach(function (uid) { writes['codexAccess/' + uid] = true; });
+      fbDb.ref().update(writes).then(function () {
+        ui.codexAccessUids = defaultUids;
+        ui.accessBusy = false;
+        render();
+      }).catch(function (err) {
+        ui.accessBusy = false;
+        ui.accessError = err.message || "Echec de l'initialisation de l'accès Codex";
+        render();
+      });
+      return;
+    }
+    ui.codexAccessUids = Object.keys(codexAccessVal).filter(function (uid) { return codexAccessVal[uid] === true; });
     ui.accessBusy = false;
     render();
   }).catch(function (err) {
@@ -1873,6 +1969,83 @@ function fbRevokeAccess(uid) {
   });
 }
 
+// ---- Codex (nœud Firebase "codex" — accès en lecture restreint par "codexAccess", voir
+// checkCodexAccess() dans index.html) ----
+function generateCodexId() {
+  return 'pnj_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function fbSaveCodexEntry(id, entry) {
+  ui.accessError = null;
+  fbEnsureAuth().then(function () {
+    return fbDb.ref('codex/' + id).set(entry);
+  }).catch(function (err) {
+    ui.accessError = err.message || "Echec de l'enregistrement du PNJ";
+    render();
+  });
+}
+
+function fbAddCodexEntry() {
+  var id = generateCodexId();
+  var entry = { prenom: 'Nouveau PNJ', nom: '', occupation: '', faction: '', lieu: '', portrait: '' };
+  ui.accessBusy = true; render();
+  fbEnsureAuth().then(function () {
+    return fbDb.ref('codex/' + id).set(entry);
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec de l'ajout du PNJ";
+    render();
+  });
+}
+
+function fbRemoveCodexEntry(id, name) {
+  if (!confirm('Supprimer "' + (name || 'ce PNJ') + '" du Codex ?')) return;
+  ui.accessBusy = true; render();
+  fbEnsureAuth().then(function () {
+    return fbDb.ref('codex/' + id).remove();
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || 'Echec de la suppression du PNJ';
+    render();
+  });
+}
+
+// Publie le Codex historique (SEED_CODEX_ADMIN, copie de l'ancien CODEX_PNJ codé en dur dans
+// index.html) sur Firebase — bouton visible uniquement tant que "codex" est vide, pour amorcer une
+// première fois plutôt que retaper 50 PNJ à la main dans ce formulaire.
+function fbImportSeedCodex() {
+  if (!confirm('Importer les ' + SEED_CODEX_ADMIN.length + ' PNJ historiques dans le Codex sur Firebase ?')) return;
+  var writes = {};
+  SEED_CODEX_ADMIN.forEach(function (n) { writes[generateCodexId()] = n; });
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return fbDb.ref('codex').update(writes);
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec de l'import du Codex";
+    render();
+  });
+}
+
+function fbToggleCodexAccess(uid, granted) {
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return granted ? fbDb.ref('codexAccess/' + uid).set(true) : fbDb.ref('codexAccess/' + uid).remove();
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec de la mise a jour de l'acces Codex";
+    render();
+  });
+}
+
 function renderAccess() {
   var panel = document.getElementById('accessPanel');
   if (ui.accessRequests === null && !ui.accessBusy) { fbLoadAccessData(); }
@@ -1937,6 +2110,43 @@ function renderAccess() {
     '</div>';
   }).join('');
 
+  // Codex : qui a le droit de le voir dans l'app (checkboxes, comme "Personnages" plus haut mais
+  // sans notion de propriétaire — une seule ressource partagée, pas un personnage par joueur), et
+  // le contenu lui-même (CRUD, écrit directement sur Firebase à chaque champ modifié).
+  var codexAccessHtml = (ui.approvedUsers || []).map(function (u) {
+    var granted = (ui.codexAccessUids || []).indexOf(u.uid) !== -1;
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;cursor:pointer;">' +
+      '<input type="checkbox" data-action="access-codex-toggle" data-uid="' + escapeHtml(u.uid) + '"' + (granted ? ' checked' : '') + '/>' +
+      '<span>' + escapeHtml(u.name || u.email || u.uid) + '</span>' +
+    '</label>';
+  }).join('') || '<div class="empty-hint" style="padding:8px 0;">Aucun utilisateur approuvé à qui donner accès.</div>';
+
+  function codexField(id, key, value, placeholder) {
+    return '<input type="text" data-action="codex-field" data-id="' + escapeHtml(id) + '" data-key="' + key + '" value="' + escapeHtml(value) + '" placeholder="' + escapeHtml(placeholder || '') + '" style="height:34px;padding:0 8px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:6px;color:var(--text-main);font-size:12px;box-sizing:border-box;width:100%;"/>';
+  }
+
+  var codexEntriesHtml = (ui.codexEntries || []).map(function (n) {
+    var fullName = (n.nom ? (n.prenom + ' ' + n.nom) : n.prenom) || 'PNJ';
+    return '<div class="pcard" style="margin-bottom:10px;padding:10px;display:flex;flex-direction:column;gap:6px;">' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<div style="flex:1;font-size:13px;font-weight:600;color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(fullName) + '</div>' +
+        '<button class="btn danger small" data-action="codex-remove" data-id="' + escapeHtml(n.id) + '" data-name="' + escapeHtml(fullName) + '">Supprimer</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">' +
+        codexField(n.id, 'prenom', n.prenom, 'Prénom') +
+        codexField(n.id, 'nom', n.nom, 'Nom') +
+        codexField(n.id, 'occupation', n.occupation, 'Occupation') +
+        codexField(n.id, 'faction', n.faction, 'Faction') +
+        codexField(n.id, 'lieu', n.lieu, 'Lieu') +
+        codexField(n.id, 'portrait', n.portrait, 'npc/xxx.jpg') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var codexImportHtml = (!ui.codexEntries || !ui.codexEntries.length)
+    ? '<div class="padd" id="btnCodexImport" style="margin-bottom:10px;">Importer le Codex historique (' + SEED_CODEX_ADMIN.length + ' PNJ)</div>'
+    : '';
+
   panel.innerHTML =
     '<div class="psec"><div class="psec-label">Gestion des accès Firebase</div></div>' +
     errorHtml + busyHtml +
@@ -1948,6 +2158,13 @@ function renderAccess() {
     '</div></div>' +
     '<div class="psec"><div class="psec-label">Personnages (accès par joueur)</div>' +
       (charactersHtml || '<div class="empty-hint">Aucun personnage sur Firebase pour l\'instant.</div>') +
+    '</div>' +
+    '<div class="psec"><div class="psec-label">Codex — accès par joueur</div><div class="pcard" style="padding:10px 12px;">' +
+      codexAccessHtml +
+    '</div></div>' +
+    '<div class="psec"><div class="psec-label">Codex — PNJ</div>' +
+      codexImportHtml + codexEntriesHtml +
+      '<div class="padd" id="btnCodexAdd">+ Ajouter un PNJ</div>' +
     '</div>' +
     '<button class="btn" id="btnAccessRefresh">Actualiser</button>';
 
@@ -1971,6 +2188,26 @@ function renderAccess() {
   panel.querySelectorAll('[data-action="access-char-delete"]').forEach(function (el) {
     el.addEventListener('click', function () { fbDeleteCharacterFirebase(el.getAttribute('data-charid'), el.getAttribute('data-name')); });
   });
+  panel.querySelectorAll('[data-action="access-codex-toggle"]').forEach(function (el) {
+    el.addEventListener('change', function () { fbToggleCodexAccess(el.getAttribute('data-uid'), el.checked); });
+  });
+  panel.querySelectorAll('[data-action="codex-remove"]').forEach(function (el) {
+    el.addEventListener('click', function () { fbRemoveCodexEntry(el.getAttribute('data-id'), el.getAttribute('data-name')); });
+  });
+  panel.querySelectorAll('[data-action="codex-field"]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      var id = el.getAttribute('data-id');
+      var key = el.getAttribute('data-key');
+      var entry = (ui.codexEntries || []).find(function (n) { return n.id === id; });
+      if (!entry) return;
+      entry[key] = el.value;
+      fbSaveCodexEntry(id, { prenom: entry.prenom, nom: entry.nom, occupation: entry.occupation, faction: entry.faction, lieu: entry.lieu, portrait: entry.portrait });
+    });
+  });
+  var codexAddBtn = document.getElementById('btnCodexAdd');
+  if (codexAddBtn) codexAddBtn.addEventListener('click', fbAddCodexEntry);
+  var codexImportBtn = document.getElementById('btnCodexImport');
+  if (codexImportBtn) codexImportBtn.addEventListener('click', fbImportSeedCodex);
 }
 
 function fbLoadPersonnage() {

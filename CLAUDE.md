@@ -391,13 +391,30 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    - **Gestion des personnages** (`renderSettingsLoadCharacter()`, troisième bouton du menu
      Paramètres) — voir section Personnages ci-dessous. Pas de toggle de thème ici : le thème suit
      le personnage chargé, voir section Thèmes (Calix / Deneor) plus bas.
-   - **Codex** (`renderSettingsCodex()`, quatrième bouton du menu Paramètres) — répertoire de PNJ
-     (`CODEX_PNJ`, objets `{ prenom, nom, occupation, faction, lieu, portrait, ... }`) avec un
-     champ de recherche live (`ui.codexSearch`) triant par pertinence sur prénom/nom/occupation/
-     lieu (`codexMatchRank()`, même principe exact > préfixe > contient que Personnage et
-     Grimoire). Chaque ligne (portrait rond, nom, occupation, faction/lieu) ouvre au tap une popup
-     portrait agrandi (`ui.codexPreview`, `data-action="open-codex-preview"`), même principe
-     d'animation enter/leave que la popup de détail de sort du Grimoire.
+   - **Codex** (`renderSettingsCodex()`, quatrième bouton du menu Paramètres **si autorisé** —
+     voir "Accès au Codex" ci-dessous, le bouton n'apparaît pas du tout dans `menuItems` sinon) —
+     répertoire de PNJ (objets `{ id, prenom, nom, occupation, faction, lieu, portrait, ... }`,
+     `id` généré côté Firebase) avec un champ de recherche live (`ui.codexSearch`) triant par
+     pertinence sur prénom/nom/occupation/lieu (`codexMatchRank()`, même principe exact > préfixe >
+     contient que Personnage et Grimoire). Chaque ligne (portrait rond, nom, occupation,
+     faction/lieu) ouvre au tap une popup portrait agrandi (`ui.codexPreview`,
+     `data-action="open-codex-preview"`), même principe d'animation enter/leave que la popup de
+     détail de sort du Grimoire.
+     **Contenu géré depuis l'outil admin, restreint par joueur** (migré depuis un tableau
+     `CODEX_PNJ` codé en dur, 2026-08-08) : le contenu vit désormais dans le nœud Firebase `codex`
+     (voir section Synchronisation cloud), édité via le panneau "Accès" de `cantrip-admin.html`
+     (CRUD complet, voir section Outil admin) plutôt que dans le code de l'app. `ui.codexAccess`
+     (`null` tant que non vérifié, puis `true`/`false`) et `ui.codexEntries` (`null` tant que non
+     chargé) sont peuplés par `checkCodexAccess(user)`, appelée depuis
+     `fbAuth.onAuthStateChanged(...)` (pas de bouton "se connecter" dédié : repose entièrement sur
+     une session déjà persistée, ex. via "Charger un personnage" — un joueur qui ne s'est jamais
+     connecté ne verra jamais l'entrée "Codex", même approuvé) — tente une lecture de `codex`,
+     interprète un succès comme un accès autorisé (les règles RTDB filtrent déjà par
+     `codexAccess/{uid}`) et un `PERMISSION_DENIED` comme non autorisé, sans distinction fine côté
+     client. `renderSettingsCodex()` affiche "Chargement…" tant que `ui.codexEntries` est `null`, et
+     un message "Accès non autorisé" en filet de sécurité si `ui.codexAccess` n'est pas `true` (la
+     page ne devrait normalement jamais être atteignable dans ce cas, l'entrée de menu étant déjà
+     masquée).
 
    Un lien discret "Outil admin" (`data-action="open-admin"`, soulignage discret, sous la date de
    dernière mise à jour en bas du menu Paramètres — voir août 2026) ouvre `cantrip-admin.html` dans
@@ -670,10 +687,34 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
       "accessRequests": {
         ".read": "auth.uid === '<UID admin>'",
         "$uid": { ".write": "auth.uid === '<UID admin>' || (auth != null && auth.uid === $uid)" }
+      },
+      "codex": {
+        ".read": "auth != null && (auth.uid === '<UID admin>' || root.child('codexAccess').child(auth.uid).val() === true)",
+        ".write": "auth.uid === '<UID admin>'"
+      },
+      "codexAccess": {
+        ".read": "auth.uid === '<UID admin>'",
+        ".write": "auth.uid === '<UID admin>'"
+      },
+      "codexAccessBootstrapped": {
+        ".read": "auth.uid === '<UID admin>'",
+        ".write": "auth.uid === '<UID admin>'"
       }
     }
   }
   ```
+  **Codex (2026-08-08)** : contenu (`codex/{pnjId}`) et accès (`codexAccess/{uid}`, un booléen par
+  utilisateur — pas de dimension par personnage comme `characterAccess`, une seule ressource
+  partagée) gérés entièrement par l'admin depuis `cantrip-admin.html`. `codex` est en écriture
+  admin-only (pas d'auto-amorçage façon `cantrip/$charId` : le Codex n'est pas créé dynamiquement
+  par les joueurs) ; sa lecture est ouverte à qui apparaît dans `codexAccess`. `codexAccessBootstrapped`
+  est un simple booléen sentinel : la première fois que le panneau "Accès" de l'outil admin est
+  ouvert après l'ajout de cette fonctionnalité, il accorde `codexAccess` à tous les utilisateurs
+  déjà approuvés à ce moment-là (voir `fbLoadAccessData()`, section Outil admin) puis pose ce
+  sentinel à `true` pour ne plus jamais refaire cet amorçage automatique — sans lui, un admin qui
+  retire l'accès Codex à tout le monde le verrait se ré-accorder tout seul au chargement suivant
+  (RTDB supprime silencieusement un nœud `codexAccess` devenu vide, indiscernable de "jamais
+  initialisé" sans ce sentinel séparé).
   **Piège corrigé (2026-08-08)** : `accessRequests/$uid` n'autorisait à écrire que l'auteur de la
   demande lui-même (`auth.uid === $uid`), sans bypass admin — or "Autoriser"/"Refuser"
   (`fbApproveAccess()`/`fbDenyAccess()`, panneau "Accès") suppriment la demande d'**un autre
@@ -879,6 +920,33 @@ du fichier, devenu mort.
 Le panneau "Accès" (voir section Synchronisation cloud) utilise désormais aussi `.panel-card`/
 `.pcard`/`.prow` (plus le mockup téléphone qu'il empruntait par erreur visuelle à l'origine — un
 tableau de gestion d'utilisateurs n'a pas vocation à ressembler à un téléphone).
+
+**Gestion du Codex, dans le panneau "Accès" uniquement** (2026-08-08, pas un mode à part dans la
+barre de titre — demande explicite : c'est une ressource d'accès/administration, pas un contenu de
+jeu au même titre que Personnage/Grimoire) — deux sections ajoutées à `renderAccess()`, alimentées
+par `fbLoadAccessData()` étendue (lit aussi `codex`/`codexAccess`/`codexAccessBootstrapped`,
+voir section Synchronisation cloud pour le détail des règles et de l'amorçage) :
+- **"Codex — accès par joueur"** : une case à cocher par utilisateur approuvé
+  (`data-action="access-codex-toggle"`, `fbToggleCodexAccess(uid, granted)` — écrit/efface
+  `codexAccess/{uid}`), même gabarit que les checkboxes "Accès accordé à" d'un personnage mais sans
+  notion de propriétaire (le Codex est une ressource unique, pas un objet par joueur qu'on peut
+  supprimer).
+- **"Codex — PNJ"** : un `.pcard` par PNJ (`ui.codexEntries`) avec 6 champs texte en grille 2
+  colonnes (prénom, nom, occupation, faction, lieu, chemin du portrait) — chaque champ écrit
+  l'entrée entière sur `codex/{id}` au `change` (`fbSaveCodexEntry()`, pas de bouton "Valider"
+  séparé, cohérent avec le reste du panneau Accès qui écrit en direct plutôt que par brouillon
+  local) ; bouton "Supprimer" par PNJ (`fbRemoveCodexEntry()`, `confirm()`) ; bouton "+ Ajouter un
+  PNJ" (`fbAddCodexEntry()`, entrée vide "Nouveau PNJ") en bas de liste. Le champ portrait reste un
+  **chemin texte vers un fichier statique** (`npc/xxx.jpg`, comme avant) : l'outil n'offre aucun
+  upload d'image (pas de backend dans ce projet) — ajouter un nouveau portrait reste une étape
+  manuelle (déposer le fichier dans `npc/` puis committer), le champ ne fait que référencer un
+  chemin qui doit déjà exister.
+  **Import ponctuel** (`fbImportSeedCodex()`, bouton "Importer le Codex historique" affiché
+  uniquement tant que `codex` est vide) : publie `SEED_CODEX_ADMIN`, une copie figée de l'ancien
+  tableau `CODEX_PNJ` (54 PNJ) qui vivait codé en dur dans `index.html` avant cette migration —
+  sert à amorcer le nœud Firebase une seule fois sans ressaisir 54 fiches à la main ; `index.html`
+  ne contient plus ce tableau du tout, il lit uniquement `codex` désormais (voir section Personnage
+  → Codex plus haut).
 
 Responsive : `.adm-content`/`.adm-charswitch`/`.adm-actionbar` restent centrés à `max-width:640px`
 quelle que soit la largeur de fenêtre (identique mobile/desktop, pas de mise en page à deux

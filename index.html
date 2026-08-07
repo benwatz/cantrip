@@ -789,6 +789,30 @@
     ]).catch(function () { /* déjà revendié entre-temps, ou hors ligne : pas bloquant */ });
   }
 
+  // Accès au Codex : géré par l'admin (nœud "codex" en lecture, restreint par "codexAccess" — voir
+  // Firebase Console), pas de bouton explicite comme Charger/Sauvegarder puisque l'entrée de menu
+  // doit rester masquée pour un utilisateur non autorisé (pas de manière de la déclencher). Repose
+  // donc entièrement sur une session déjà persistée (fbAuth.onAuthStateChanged, IndexedDB) : un
+  // utilisateur qui ne s'est jamais connecté (jamais utilisé Charger/Sauvegarder un personnage) ne
+  // verra jamais le Codex tant qu'il ne s'est pas connecté au moins une fois par ce biais — aucun
+  // popup de connexion n'est déclenché ici spécifiquement pour le Codex.
+  function checkCodexAccess(user) {
+    if (!user) { ui.codexAccess = false; ui.codexEntries = null; render(); return; }
+    fbDb.ref('codex').once('value').then(function (snapshot) {
+      var val = snapshot.val() || {};
+      ui.codexEntries = Object.keys(val).map(function (id) {
+        var n = val[id] || {};
+        return { id: id, prenom: n.prenom || '', nom: n.nom || '', occupation: n.occupation || '', faction: n.faction || '', lieu: n.lieu || '', portrait: n.portrait || '' };
+      });
+      ui.codexAccess = true;
+      render();
+    }).catch(function () {
+      ui.codexAccess = false;
+      ui.codexEntries = null;
+      render();
+    });
+  }
+
   var state = loadState();
   applyTheme();
 
@@ -836,7 +860,9 @@
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     spellDetail: null, // null | { spell, levelTag, leaving: bool } — popup d'infos complètes au tap sur un sort du Grimoire
     spellDetailEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
-    githubDeployInfo: { status: 'idle', date: null } // 'idle'|'loading'|'loaded'|'error' — date du dernier commit sur master (proxy du dernier déploiement GitHub Pages), affichée en bas de Paramètres
+    githubDeployInfo: { status: 'idle', date: null }, // 'idle'|'loading'|'loaded'|'error' — date du dernier commit sur master (proxy du dernier déploiement GitHub Pages), affichée en bas de Paramètres
+    codexAccess: null, // null (pas encore vérifié) | true | false — accès au Codex, géré par l'admin (nœud Firebase "codex"/"codexAccess") ; tant que null ou false, l'entrée "Codex" du menu Paramètres reste masquée
+    codexEntries: null // null (pas encore chargé) | tableau [{ id, prenom, nom, occupation, faction, lieu, portrait }] une fois codexAccess === true
   };
 
   function profile() { return state.profiles[state.activeProfileIndex]; }
@@ -1142,63 +1168,6 @@
   // SPELLBOOK/DENEOR_SPELLBOOK ci-dessus), importé depuis la liste tenue par le MJ. Les portraits
   // sont des fichiers statiques dans npc/ (pas de base64 inline), même convention que
   // characters/calix.jpg. "💀" en lieu signifie que le PNJ est décédé.
-  var CODEX_PNJ = [
-    { prenom: "Methrammar", nom: "Aerasumé", occupation: "Grand Mage", faction: "Alliance des Seigneurs", lieu: "Lunargent", portrait: "npc/methrammar-aerasume.jpg" },
-    { prenom: "Sildar", nom: "Antriver", occupation: "Chevalier, Ambassadeur", faction: "Alliance des Seigneurs", lieu: "Padhiver", portrait: "npc/sildar-antriver.png" },
-    { prenom: "Iarno", nom: "'Bâton de Verre' Albrek", occupation: "Magicien", faction: "Alliance des Seigneurs", lieu: "💀", portrait: "npc/iarno-baton-de-verre-albrek.png" },
-    { prenom: "Darathra", nom: "Shendrel", occupation: "Seigneur Protectrice", faction: "Alliance des Seigneurs", lieu: "Troisangliers", portrait: "npc/darathra-shendrel.png" },
-    { prenom: "Nestra", nom: "Ruthiol", occupation: "Baronne des Eaux", faction: "Alliance des Seigneurs", lieu: "Yartar", portrait: "npc/nestra-ruthiol.jpg" },
-    { prenom: "Daran", nom: "Edermath", occupation: "Aventurier vétéran", faction: "Ordre du Gantelet", lieu: "Voyage", portrait: "npc/daran-edermath.jpg" },
-    { prenom: "Ontharr", nom: "Frume", occupation: "Paladin de Torm", faction: "Ordre du Gantelet", lieu: "Troisangliers", portrait: "npc/ontharr-frume.png" },
-    { prenom: "Leosine", nom: "Erlanthar", occupation: "Espionne", faction: "Ménestrels", lieu: "Voyage", portrait: "npc/leosine-erlanthar.jpg" },
-    { prenom: "Polly", nom: "Morphe", occupation: "Tenancière", faction: "Ménestrels", lieu: "Lunargent", portrait: "npc/polly-morphe.jpg" },
-    { prenom: "Roran", nom: "Balkian", occupation: "Cartographe", faction: "Ménestrels", lieu: "Lunargent", portrait: "npc/roran-balkian.jpg" },
-    { prenom: "Halia", nom: "Thornton", occupation: "Bourgmestre, Chef des Mineurs", faction: "Zhentarim", lieu: "Phandaline", portrait: "npc/halia-thornton.jpg" },
-    { prenom: "'Rouflaquettes'", nom: "", occupation: "Roublard", faction: "Zhentarim", lieu: "Phandaline", portrait: "npc/rouflaquettes.jpg" },
-    { prenom: "Sept", nom: "Saisons", occupation: "Propriétaire de casino", faction: "Zhentarim", lieu: "Lunargent", portrait: "npc/sept-saisons.jpg" },
-    { prenom: "Lila & Grommash", nom: "", occupation: "Primeurs", faction: "Devorare Animas", lieu: "Lunargent", portrait: "npc/lila-grommash.jpg" },
-    { prenom: "Morgana", nom: "", occupation: "Aventurière", faction: "Devorare Animas", lieu: "Lunargent", portrait: "npc/morgana.jpg" },
-    { prenom: "Kresnie", nom: "Tête-de-Lapis", occupation: "Artisan du cuir", faction: "Devorare Animas", lieu: "Yartar", portrait: "npc/kresnie-tete-de-lapis.jpg" },
-    { prenom: "Dralmorrer", nom: "Mornemine", occupation: "Crocdragon", faction: "Culte du Dragon", lieu: "Inconnu", portrait: "npc/dralmorrer-mornemine.png" },
-    { prenom: "Rezmir", nom: "la Noire", occupation: "Voix du Culte", faction: "Culte du Dragon", lieu: "💀", portrait: "npc/rezmir-la-noire.png" },
-    { prenom: "Elmina", nom: "Barthen", occupation: "Marchande", faction: "", lieu: "Phandaline", portrait: "npc/elmina-barthen.jpg" },
-    { prenom: "Qelline", nom: "Aulnefeuille", occupation: "Fermière", faction: "", lieu: "Phandaline", portrait: "npc/qelline-aulnefeuille.jpg" },
-    { prenom: "Linene", nom: "Ventgris", occupation: "Marchande", faction: "Bouclier au Lion", lieu: "Phandaline", portrait: "npc/linene-ventgris.png" },
-    { prenom: "Gundren", nom: "Cherchepierre", occupation: "Marchand, Propriétaire de Mine", faction: "", lieu: "Phandaline", portrait: "npc/gundren-cherchepierre.png" },
-    { prenom: "Toblen", nom: "Rochemont", occupation: "Tenancier", faction: "", lieu: "Phandaline", portrait: "npc/toblen-rochemont.jpg" },
-    { prenom: "Droop", nom: "", occupation: "Chef de clan", faction: "Clan Scraptop", lieu: "Bois de Padhiver", portrait: "npc/droop.png" },
-    { prenom: "Reidoth", nom: "", occupation: "Druide", faction: "Enclave d'Emeraude", lieu: "Bois de Padhiver", portrait: "npc/reidoth.jpg" },
-    { prenom: "Abella", nom: "Lokelani", occupation: "Chevalier", faction: "Compagnons", lieu: "Troisangliers", portrait: "npc/abella-lokelani.jpg" },
-    { prenom: "Fildo", nom: "Affûteplume", occupation: "Barde de Milil", faction: "", lieu: "Troisangliers", portrait: "npc/fildo-affuteplume.jpg" },
-    { prenom: "Gilthur", nom: "Helcral", occupation: "Chevalier", faction: "Poing Enflammé", lieu: "Troisangliers", portrait: "npc/gilthur-helcral.jpg" },
-    { prenom: "Ekemon", nom: "", occupation: "Serveur", faction: "", lieu: "Troisangliers", portrait: "npc/ekemon.jpg" },
-    { prenom: "Kalys", nom: "Tanker", occupation: "Paladin d'Ilmater", faction: "", lieu: "Troisangliers", portrait: "npc/kalys-tanker.jpg" },
-    { prenom: "Morla", nom: "Welby", occupation: "Marchand, Adepte de Waukyne", faction: "", lieu: "Troisangliers", portrait: "npc/morla-welby.jpg" },
-    { prenom: "Griselda", nom: "", occupation: "Fermière", faction: "", lieu: "Troisangliers", portrait: "npc/griselda.jpg" },
-    { prenom: "Oriana", nom: "Keelin", occupation: "Chevalier", faction: "Dragons Pourpres", lieu: "Troisangliers", portrait: "npc/oriana-keelin.jpg" },
-    { prenom: "Varis", nom: "Teinithra", occupation: "Enchanteur", faction: "", lieu: "Troisangliers", portrait: "npc/varis-teinithra.jpg" },
-    { prenom: "Tayla", nom: "Sharrington", occupation: "Garde-Forestière", faction: "", lieu: "Troisangliers", portrait: "npc/tayla-sharrington.jpg" },
-    { prenom: "Aru", nom: "", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/aru.jpg" },
-    { prenom: "Dosla", nom: "", occupation: "Magicienne", faction: "", lieu: "Yartar", portrait: "npc/dosla.jpg" },
-    { prenom: "Gavan", nom: "Ronnad", occupation: "Lieutenant des Boucliers de Yartar", faction: "", lieu: "Yartar", portrait: "npc/gavan-ronnad.jpg" },
-    { prenom: "Hildegarde", nom: "Lakkena", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/hildegarde-lakkena.jpg" },
-    { prenom: "Emil", nom: "Toranescu", occupation: "Chef de bande", faction: "Phalanges de Yartar", lieu: "Yartar", portrait: "npc/emil-toranescu.jpg" },
-    { prenom: "Magrea", nom: "", occupation: "Compagnie souriante", faction: "", lieu: "Yartar", portrait: "npc/magrea.jpg" },
-    { prenom: "Lalita", nom: "Pétronille", occupation: "Marchande", faction: "", lieu: "Yartar", portrait: "npc/lalita-petronille.jpg" },
-    { prenom: "Urgazir", nom: "", occupation: "Mercenaire", faction: "Uthgardt", lieu: "Yartar", portrait: "npc/urgazir.jpg" },
-    { prenom: "Varana", nom: "'La Pie' Roncecolline", occupation: "Chef de bande", faction: "Phalanges de Yartar", lieu: "Yartar", portrait: "npc/varana-la-pie-roncecolline.jpg" },
-    { prenom: "Elvina", nom: "", occupation: "Farceuse", faction: "Enclave d'Emeraude", lieu: "Féerie", portrait: "npc/elvina.jpg" },
-    { prenom: "Polynomise", nom: "", occupation: "Championne", faction: "Cour de Verenestra", lieu: "Féerie", portrait: "npc/polynomise.jpg" },
-    { prenom: "Aerosclughpalar", nom: "", occupation: "Gardien de la Féerie", faction: "Enclave d'Emeraude", lieu: "Féerie", portrait: "npc/aerosclughpalar.jpg" },
-    { prenom: "Cumillas", nom: "", occupation: "Ivrogne", faction: "", lieu: "Féerie", portrait: "npc/cumillas.jpg" },
-    { prenom: "Meryas", nom: "Dansecoeur", occupation: "Etudiant", faction: "", lieu: "Lunargent", portrait: "npc/meryas-dansecoeur.jpg" },
-    { prenom: "Meriel", nom: "Qualimahar", occupation: "Capitaine de la Légion d'Argent", faction: "", lieu: "Lunargent", portrait: "npc/meriel-qualimahar.jpg" },
-    { prenom: "Thora", nom: "Brisefer", occupation: "Forgeronne", faction: "", lieu: "Lunargent", portrait: "npc/thora-brisefer.jpg" },
-    { prenom: "Nezznar", nom: "l'Araignée Noire", occupation: "Noble", faction: "T'sarran", lieu: "💀", portrait: "npc/nezznar-araignee-noire.png" },
-    { prenom: "Roi", nom: "Grol", occupation: "Roi", faction: "Clan des Dents-Pointues", lieu: "💀", portrait: "npc/roi-grol.jpg" },
-    { prenom: "Wirt", nom: "Ruthiol", occupation: "", faction: "", lieu: "💀", portrait: "npc/wirt-ruthiol.jpg" }
-  ];
-
   // ---- render ----
   var app = document.getElementById('app');
 
@@ -1830,9 +1799,9 @@
     var menuItems = [
       { view: 'settings-character', label: 'Paramétrer le personnage' },
       { view: 'settings-grimoire', label: 'Paramétrer le Grimoire' },
-      { view: 'settings-load-character', label: 'Charger un personnage' },
-      { view: 'settings-codex', label: 'Codex' }
+      { view: 'settings-load-character', label: 'Charger un personnage' }
     ];
+    if (ui.codexAccess === true) menuItems.push({ view: 'settings-codex', label: 'Codex' });
     var itemsHtml = menuItems.map(function (item) {
       return '<div data-action="nav" data-view="' + item.view + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;cursor:pointer;color:var(--text-main)">' +
         '<div style="font-size:15px;font-weight:600">' + item.label + '</div>' +
@@ -2260,6 +2229,26 @@
   // contient) sur le meilleur des quatre champs, champ de saisie exclu de la présélection globale
   // au focus (voir listener 'focusin') et focus préservé d'un re-render à l'autre (bindEvents()).
   function renderSettingsCodex() {
+    // Filet de sécurité : l'entrée de menu est masquée tant que codexAccess n'est pas true (voir
+    // renderSettings()), mais ui.view peut en théorie rester sur 'settings-codex' d'une session à
+    // l'autre (état non persisté ici, donc improbable) ou si l'accès est retiré en cours de route.
+    if (ui.codexAccess !== true) {
+      return (
+        '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
+          renderSettingsHeader('Codex') +
+          '<div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:13px;color:var(--text-dim)">Accès non autorisé.</div>' +
+        '</div>'
+      );
+    }
+    if (!ui.codexEntries) {
+      return (
+        '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
+          renderSettingsHeader('Codex') +
+          '<div style="flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:13px;color:var(--text-dim)">Chargement…</div>' +
+        '</div>'
+      );
+    }
+
     var search = ui.codexSearch || '';
     var searchLower = search.toLowerCase();
 
@@ -2277,7 +2266,7 @@
       return ranks.length ? Math.min.apply(null, ranks) : null;
     }
 
-    var filtered = CODEX_PNJ
+    var filtered = ui.codexEntries
       .map(function (n) { return { npc: n, rank: codexMatchRank(n) }; })
       .filter(function (x) { return x.rank !== null; })
       .sort(function (a, b) { return a.rank - b.rank; })
@@ -2287,7 +2276,7 @@
       ? filtered.map(function (n) {
           var fullName = n.nom ? (n.prenom + ' ' + n.nom) : n.prenom;
           var metaParts = [n.faction, n.lieu].filter(function (v) { return v; });
-          return '<div data-action="open-codex-preview" data-codex-index="' + CODEX_PNJ.indexOf(n) + '" style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(var(--border-tint),0.15);cursor:pointer">' +
+          return '<div data-action="open-codex-preview" data-codex-id="' + escapeHtml(n.id) + '" style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(var(--border-tint),0.15);cursor:pointer">' +
             '<img src="' + escapeHtml(n.portrait) + '" alt="" style="flex:none;width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.3)"/>' +
             '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">' +
               '<div style="font-size:14px;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(fullName) + '</div>' +
@@ -3366,7 +3355,9 @@
         dismissConcentrationToast();
         break;
       case 'open-codex-preview': {
-        var codexNpc = CODEX_PNJ[parseInt(e.currentTarget.getAttribute('data-codex-index'), 10)];
+        var codexId = e.currentTarget.getAttribute('data-codex-id');
+        var codexNpc = (ui.codexEntries || []).find(function (n) { return n.id === codexId; });
+        if (!codexNpc) break;
         ui.codexPreview = {
           portrait: codexNpc.portrait,
           name: codexNpc.nom ? (codexNpc.prenom + ' ' + codexNpc.nom) : codexNpc.prenom,
@@ -3836,6 +3827,8 @@
     showRestToast();
     render();
   }
+
+  fbAuth.onAuthStateChanged(function (user) { checkCodexAccess(user); });
 
   render();
 
