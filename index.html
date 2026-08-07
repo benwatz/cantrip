@@ -700,13 +700,30 @@
   var fbDb = firebase.database();
   var FB_DATA_PATH = 'cantrip'; // équivalent du "bdd.json" de l'ancienne synchro Drive
 
+  // Signale au propriétaire du projet (le seul UID à pouvoir lire/écrire ce nœud, voir les règles
+  // de sécurité RTDB dans Firebase Console) qu'un compte Google veut accéder aux données —
+  // approuvé ou non, l'écriture réussit toujours (les règles autorisent tout utilisateur connecté
+  // à écrire sa propre demande) : l'admin approuve/refuse depuis cantrip-admin.html (panneau
+  // "Accès"). Fire-and-forget, ne bloque jamais le flux Charger/Sauvegarder appelant.
+  function fbRequestAccess(user) {
+    fbDb.ref('accessRequests/' + user.uid).set({
+      email: user.email || '',
+      name: user.displayName || '',
+      requestedAt: Date.now()
+    }).catch(function () { /* déjà approuvé ou hors ligne : pas bloquant */ });
+  }
+
   // Ouvre le popup de connexion Google si besoin ; ne redemande rien si déjà connecté (Firebase
   // Auth persiste la session dans IndexedDB entre les rechargements, contrairement au jeton OAuth
   // de l'ancienne synchro Drive, qui expirait au bout d'une heure).
   function fbEnsureAuth() {
-    if (fbAuth.currentUser) return Promise.resolve(fbAuth.currentUser);
+    if (fbAuth.currentUser) {
+      fbRequestAccess(fbAuth.currentUser);
+      return Promise.resolve(fbAuth.currentUser);
+    }
     var provider = new firebase.auth.GoogleAuthProvider();
     return fbAuth.signInWithPopup(provider).then(function (result) {
+      fbRequestAccess(result.user);
       return result.user;
     }).catch(function (err) {
       throw new Error('Connexion Google refusée (' + (err.code || err.message) + ')');
@@ -755,7 +772,11 @@
         updated = mutateFn(current || {});
         return updated;
       }).then(function (result) {
-        if (!result.committed) throw new Error('Écriture refusée par les règles Firebase.');
+        if (!result.committed) {
+          var deniedErr = new Error('Écriture refusée par les règles Firebase.');
+          deniedErr.code = 'PERMISSION_DENIED';
+          throw deniedErr;
+        }
         return updated;
       });
     });
@@ -3631,6 +3652,16 @@
   }
 
   // ---- actions Charger/Sauvegarder (Firebase), déclenchées après confirmation ----
+  // RTDB rejette une lecture/écriture non autorisée avec err.code === 'PERMISSION_DENIED' — cas
+  // le plus courant pour un joueur : compte Google valide mais pas encore approuvé par l'admin
+  // (fbRequestAccess() a quand même enregistré sa demande, voir plus haut).
+  function fbFriendlyError(err, fallback) {
+    if (err && err.code === 'PERMISSION_DENIED') {
+      return "Compte connecté mais pas encore approuvé pour accéder aux données. Une demande d'accès a été envoyée — réessaie une fois approuvé(e).";
+    }
+    return (err && err.message) || fallback;
+  }
+
   function performFbLoad(charId) {
     ui.fbBusy = true; ui.fbError = null; render();
     fbLoadBdd().then(function (bdd) {
@@ -3653,7 +3684,7 @@
       render();
     }).catch(function (err) {
       ui.fbBusy = false;
-      ui.fbError = err.message || 'Échec du chargement depuis Firebase';
+      ui.fbError = fbFriendlyError(err, 'Échec du chargement depuis Firebase');
       render();
     });
   }
@@ -3681,7 +3712,7 @@
       render();
     }).catch(function (err) {
       ui.fbBusy = false;
-      ui.fbError = err.message || 'Échec de la sauvegarde sur Firebase';
+      ui.fbError = fbFriendlyError(err, 'Échec de la sauvegarde sur Firebase');
       render();
     });
   }

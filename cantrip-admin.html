@@ -230,6 +230,7 @@
   <div class="topbar-right">
     <button class="btn" id="btnModePersonnage">Personnage</button>
     <button class="btn" id="btnModeGrimoire">Grimoire</button>
+    <button class="btn" id="btnModeAcces">Accès</button>
     <button class="btn" id="btnFbLoad">Charger</button>
     <button class="btn primary" id="btnFbSave">Sauvegarder</button>
   </div>
@@ -251,6 +252,7 @@
   </div>
 
   <div class="person-panel" id="personPanel" style="display:none;"></div>
+  <div class="person-panel" id="accessPanel" style="display:none;"></div>
 
   <div class="side-panel">
     <h2 id="sidePanelTitle">Comment ça marche</h2>
@@ -699,11 +701,15 @@ function sanitizeAdminProfile(p) {
 
 // ---- state ----
 var ui = {
-  mode: 'grimoire', // 'grimoire' | 'personnage'
+  mode: 'grimoire', // 'grimoire' | 'personnage' | 'acces'
   activeChar: 'calix', // 'calix' | 'deneor'
   activeLevel: null,
   filters: { action: false, bonus: false, reaction: false },
-  levelError: '' // message d'erreur d'activation d'un emplacement de sorts (mode Personnage)
+  levelError: '', // message d'erreur d'activation d'un emplacement de sorts (mode Personnage)
+  accessRequests: null, // null (jamais chargé) | tableau [{ uid, email, name, requestedAt }]
+  approvedUsers: null, // null (jamais chargé) | tableau [uid]
+  accessBusy: false,
+  accessError: null
 };
 
 function cloneSeed() {
@@ -793,22 +799,27 @@ function render() {
   btnCalix.onclick = function () { ui.activeChar = 'calix'; ui.activeLevel = null; render(); };
   btnDeneor.onclick = function () { ui.activeChar = 'deneor'; ui.activeLevel = null; render(); };
 
-  // mode buttons (Personnage / Grimoire)
+  // mode buttons (Personnage / Grimoire / Accès)
   var btnPerso = document.getElementById('btnModePersonnage');
   var btnGrim = document.getElementById('btnModeGrimoire');
+  var btnAcces = document.getElementById('btnModeAcces');
   btnPerso.className = 'btn' + (ui.mode === 'personnage' ? ' primary' : '');
   btnGrim.className = 'btn' + (ui.mode === 'grimoire' ? ' primary' : '');
+  btnAcces.className = 'btn' + (ui.mode === 'acces' ? ' primary' : '');
   btnPerso.onclick = function () { ui.mode = 'personnage'; render(); };
   btnGrim.onclick = function () { ui.mode = 'grimoire'; render(); };
+  btnAcces.onclick = function () { ui.mode = 'acces'; render(); };
 
   document.getElementById('btnFbLoad').onclick = fbLoadPersonnage;
   document.getElementById('btnFbSave').onclick = fbSavePersonnage;
 
   document.getElementById('phone').style.display = ui.mode === 'grimoire' ? 'flex' : 'none';
   document.getElementById('personPanel').style.display = ui.mode === 'personnage' ? 'flex' : 'none';
+  document.getElementById('accessPanel').style.display = ui.mode === 'acces' ? 'flex' : 'none';
   renderSidePanel();
 
   if (ui.mode === 'personnage') { renderPersonnage(); return; }
+  if (ui.mode === 'acces') { renderAccess(); return; }
 
   var sections = activeSections();
   var order = levelOrder(sections);
@@ -1538,6 +1549,127 @@ function fbSaveBdd(mutateFn) {
       if (!result.committed) throw new Error('Ecriture refusee par les regles Firebase.');
       return updated;
     });
+  });
+}
+
+// ---- gestion des demandes d'accès (approvedUsers / accessRequests) ----
+// L'admin (seul UID autorisé par les règles RTDB à lire/écrire ces deux chemins) approuve ou
+// refuse les demandes envoyées automatiquement par index.html (fbRequestAccess()) au premier
+// login d'un utilisateur non encore approuvé.
+function fbLoadAccessData() {
+  ui.accessBusy = true; ui.accessError = null; render();
+  return fbEnsureAuth().then(function () {
+    return Promise.all([
+      fbDb.ref('accessRequests').once('value'),
+      fbDb.ref('approvedUsers').once('value')
+    ]);
+  }).then(function (results) {
+    var requestsVal = results[0].val() || {};
+    var approvedVal = results[1].val() || {};
+    ui.accessRequests = Object.keys(requestsVal).map(function (uid) {
+      var r = requestsVal[uid] || {};
+      return { uid: uid, email: r.email || '', name: r.name || '', requestedAt: r.requestedAt || 0 };
+    }).sort(function (a, b) { return b.requestedAt - a.requestedAt; });
+    ui.approvedUsers = Object.keys(approvedVal).filter(function (uid) { return approvedVal[uid] === true; });
+    ui.accessBusy = false;
+    render();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || 'Echec du chargement des acces';
+    render();
+  });
+}
+
+function fbApproveAccess(uid) {
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return Promise.all([
+      fbDb.ref('approvedUsers/' + uid).set(true),
+      fbDb.ref('accessRequests/' + uid).remove()
+    ]);
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec de l'approbation";
+    render();
+  });
+}
+
+function fbDenyAccess(uid) {
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return fbDb.ref('accessRequests/' + uid).remove();
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || 'Echec du refus';
+    render();
+  });
+}
+
+function fbRevokeAccess(uid) {
+  if (!confirm("Retirer l'accès de cet utilisateur ? Il ne pourra plus lire ni écrire les personnages tant qu'il n'est pas ré-approuvé.")) return;
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return fbDb.ref('approvedUsers/' + uid).remove();
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec du retrait d'accès";
+    render();
+  });
+}
+
+function renderAccess() {
+  var panel = document.getElementById('accessPanel');
+  if (ui.accessRequests === null && !ui.accessBusy) { fbLoadAccessData(); }
+
+  var errorHtml = ui.accessError ? '<div class="psec"><div style="font-size:12px;color:#ef4444;">' + escapeHtml(ui.accessError) + '</div></div>' : '';
+  var busyHtml = ui.accessBusy ? '<div class="psec"><div class="empty-hint">Chargement…</div></div>' : '';
+
+  var requestsHtml = (ui.accessRequests || []).map(function (r) {
+    var when = r.requestedAt ? new Date(r.requestedAt).toLocaleString('fr-FR') : '';
+    return '<div class="prow" style="flex-direction:column;align-items:stretch;gap:6px;">' +
+      '<div style="font-size:13px;font-weight:600;color:var(--text-main);">' + escapeHtml(r.name || r.email || r.uid) + '</div>' +
+      '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(r.email || '') + (when ? ' · demandé le ' + when : '') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:4px;">' +
+        '<button class="btn primary" data-action="access-approve" data-uid="' + escapeHtml(r.uid) + '" style="flex:1;">Autoriser</button>' +
+        '<button class="btn" data-action="access-deny" data-uid="' + escapeHtml(r.uid) + '" style="flex:1;">Refuser</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var approvedHtml = (ui.approvedUsers || []).map(function (uid) {
+    return '<div class="prow">' +
+      '<div style="flex:1;font-size:11px;color:var(--text-muted);word-break:break-all;">' + escapeHtml(uid) + '</div>' +
+      '<button class="btn" data-action="access-revoke" data-uid="' + escapeHtml(uid) + '">Retirer</button>' +
+    '</div>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div class="psec"><div class="psec-label">Gestion des accès Firebase</div></div>' +
+    errorHtml + busyHtml +
+    '<div class="psec"><div class="psec-label">Demandes en attente</div><div class="pcard">' +
+      (requestsHtml || '<div class="empty-hint">Aucune demande en attente.</div>') +
+    '</div></div>' +
+    '<div class="psec"><div class="psec-label">Utilisateurs approuvés</div><div class="pcard">' +
+      (approvedHtml || '<div class="empty-hint">Aucun utilisateur approuvé pour l\'instant.</div>') +
+    '</div></div>' +
+    '<button class="btn" id="btnAccessRefresh">Actualiser</button>';
+
+  var refreshBtn = document.getElementById('btnAccessRefresh');
+  if (refreshBtn) refreshBtn.addEventListener('click', fbLoadAccessData);
+  panel.querySelectorAll('[data-action="access-approve"]').forEach(function (el) {
+    el.addEventListener('click', function () { fbApproveAccess(el.getAttribute('data-uid')); });
+  });
+  panel.querySelectorAll('[data-action="access-deny"]').forEach(function (el) {
+    el.addEventListener('click', function () { fbDenyAccess(el.getAttribute('data-uid')); });
+  });
+  panel.querySelectorAll('[data-action="access-revoke"]').forEach(function (el) {
+    el.addEventListener('click', function () { fbRevokeAccess(el.getAttribute('data-uid')); });
   });
 }
 

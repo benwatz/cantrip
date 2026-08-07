@@ -609,10 +609,48 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
 - **Auth** : Firebase Authentication, provider Google (`signInWithPopup`), session persistée par
   le SDK (IndexedDB) — pas de ré-authentification à chaque lancement contrairement à l'ancien
   jeton OAuth Drive qui expirait au bout d'une heure.
-- **Règles de sécurité RTDB** : `{ ".read": "auth != null", ".write": "auth != null" }` — tout
-  utilisateur connecté avec un compte Google peut lire/écrire (choix délibéré pour permettre à
-  plusieurs joueurs, ex. Deneor, de synchroniser depuis leur propre compte sans configuration
-  d'UID individuelle).
+- **Règles de sécurité RTDB** : liste blanche `approvedUsers` (nœud racine, `{ [uid]: true }`),
+  resserrée le 2026-08-07 après une première version ouverte à "tout utilisateur connecté" jugée
+  trop permissive (n'importe quel compte Google tombant sur l'URL publique de l'app aurait pu
+  écraser les données) :
+  ```json
+  {
+    "rules": {
+      "cantrip": {
+        ".read": "auth != null && root.child('approvedUsers').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('approvedUsers').child(auth.uid).val() === true"
+      },
+      "approvedUsers": {
+        ".read": "auth.uid === '<UID admin>'",
+        ".write": "auth.uid === '<UID admin>'"
+      },
+      "accessRequests": {
+        ".read": "auth.uid === '<UID admin>'",
+        "$uid": { ".write": "auth != null && auth.uid === $uid" }
+      }
+    }
+  }
+  ```
+  Seul l'UID admin (l'utilisateur, codé en dur dans les règles côté Firebase Console — **pas**
+  dans le JS client) peut lire/écrire `approvedUsers` et lire `accessRequests` ; n'importe quel
+  utilisateur connecté peut écrire **sa propre** entrée sous `accessRequests/{son uid}` (mais pas
+  la lire), ce qui alimente le flux de demande d'accès ci-dessous.
+  **Flux de demande d'accès** (ajouté 2026-08-07, pour éviter d'avoir à copier-coller un UID à la
+  main dans la console à chaque nouvel utilisateur) : `fbRequestAccess(user)` (`index.html`) écrit
+  `accessRequests/{uid} = { email, name, requestedAt }` à chaque `fbEnsureAuth()` réussi — que
+  l'utilisateur soit déjà approuvé ou non, l'écriture réussit toujours (règle ci-dessus) ; ce n'est
+  qu'un signal, pas une porte d'accès. Si l'utilisateur n'est pas encore dans `approvedUsers`, ses
+  tentatives de lecture/écriture sur `cantrip` échouent avec `err.code === 'PERMISSION_DENIED'`
+  (RTDB), traduit côté UI par `fbFriendlyError()` en un message convivial plutôt que l'erreur brute
+  ("Compte connecté mais pas encore approuvé... Une demande d'accès a été envoyée").
+  Le panneau **"Accès"** de `cantrip-admin.html` (troisième bouton du topbar, entre "Grimoire" et
+  "Charger", `ui.mode = 'acces'`, `renderAccess()`) liste les demandes en attente (bouton
+  **Autoriser** → `approvedUsers/{uid} = true` + suppression de la demande ; **Refuser** →
+  suppression de la demande seule) et les utilisateurs déjà approuvés (bouton **Retirer** →
+  suppression de `approvedUsers/{uid}`, avec confirmation native vu le caractère destructif).
+  `fbLoadAccessData()`/`fbApproveAccess()`/`fbDenyAccess()`/`fbRevokeAccess()` sont propres à
+  `cantrip-admin.html` (pas dans `index.html`, qui ne fait qu'émettre des demandes, jamais les
+  gérer).
 - **Config client** (`FIREBASE_CONFIG`, dupliquée dans `index.html` et `cantrip-admin.html`,
   même convention que le reste des constantes de sync) : n'est pas un secret, comme l'ancien
   Client ID OAuth Drive — les règles RTDB ci-dessus sont la vraie barrière d'accès, pas la config.
@@ -620,11 +658,13 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   via CDN (`gstatic.com/firebasejs`), API namespacée `firebase.*` plutôt que les imports ES
   modules du SDK v9+ — choisi pour rester cohérent avec le style `<script>` classique du projet
   (pas de build step, pas de `type="module"`).
-- Fonctions bas niveau : `fbEnsureAuth()` (popup Google si pas déjà connecté), `fbLoadBdd()`
-  (lecture simple du nœud), `fbSaveBdd(mutateFn)` (écriture via `transaction()` RTDB plutôt qu'un
-  read-then-write manuel, pour fusionner avec l'autre personnage et rester correct en cas
-  d'écriture concurrente depuis un autre appareil) — dupliquées dans les deux fichiers, comme le
-  reste de la synchro.
+- Fonctions bas niveau : `fbEnsureAuth()` (popup Google si pas déjà connecté, déclenche aussi
+  `fbRequestAccess()` — voir demande d'accès ci-dessous), `fbLoadBdd()` (lecture simple du nœud),
+  `fbSaveBdd(mutateFn)` (écriture via `transaction()` RTDB plutôt qu'un read-then-write manuel,
+  pour fusionner avec l'autre personnage et rester correct en cas d'écriture concurrente depuis un
+  autre appareil, l'échec de commit étant retagué `err.code = 'PERMISSION_DENIED'` pour un
+  traitement uniforme par `fbFriendlyError()`) — dupliquées dans les deux fichiers, comme le reste
+  de la synchro.
 
 **Historique : migration depuis Google Drive (2026-08-07).** L'implémentation initiale (2026-07-23)
 stockait `bdd.json` sur Google Drive via l'API REST + OAuth (`drive` scope, dossier "Cantrip"
