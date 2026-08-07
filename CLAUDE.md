@@ -640,7 +640,10 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
       },
       "approvedUsers": {
         ".read": "auth.uid === '<UID admin>'",
-        ".write": "auth.uid === '<UID admin>'"
+        ".write": "auth.uid === '<UID admin>'",
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid"
+        }
       },
       "approvedUserInfo": {
         ".read": "auth.uid === '<UID admin>'",
@@ -662,11 +665,19 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
       },
       "accessRequests": {
         ".read": "auth.uid === '<UID admin>'",
-        "$uid": { ".write": "auth != null && auth.uid === $uid" }
+        "$uid": { ".write": "auth.uid === '<UID admin>' || (auth != null && auth.uid === $uid)" }
       }
     }
   }
   ```
+  **Piège corrigé (2026-08-08)** : `accessRequests/$uid` n'autorisait à écrire que l'auteur de la
+  demande lui-même (`auth.uid === $uid`), sans bypass admin — or "Autoriser"/"Refuser"
+  (`fbApproveAccess()`/`fbDenyAccess()`, panneau "Accès") suppriment la demande d'**un autre
+  utilisateur** que l'admin, ce qui échouait systématiquement avec `PERMISSION_DENIED` (repéré par
+  l'utilisateur en tentant d'approuver une vraie demande). `approvedUsers` a aussi reçu un
+  `$uid: { .read: soi-même }` le même jour (2026-08-07 initialement, documenté ici) pour que
+  `checkAuthorization()` de l'écran de connexion de l'outil admin (voir section Outil admin) puisse
+  vérifier un statut d'approbation non-admin sans avoir accès à la liste complète.
   **Piège corrigé (2026-08-07)** : le `.read` sur `cantrip` lui-même (pas seulement sur ses enfants
   `_meta`/`$charId`) est nécessaire pour que `fbLoadAccessData()` (`cantrip-admin.html`, panneau
   "Personnages") puisse lire `fbDb.ref('cantrip').once('value')` et énumérer tous les personnages
@@ -790,20 +801,10 @@ utilisateurs n'y ont de toute façon pas droit). Si aucune des deux lectures n'a
 "Accès non autorisé" propose "Demander l'accès" (réutilise `accessRequests/{uid}`, déjà
 autorisé en écriture à tout utilisateur connecté par les règles existantes) puis attend
 l'approbation admin dans le panneau "Accès" (voir section Synchronisation cloud).
-**Prérequis règles RTDB (Firebase Console) pour que le cas "utilisateur approuvé non-admin"
-fonctionne** : la règle `approvedUsers` actuelle est `.read`/`.write` admin-only, donc un
-utilisateur non-admin ne peut pas lire son propre statut. Ajouter un accès en lecture à soi-même
-sans toucher au reste :
-```json
-"approvedUsers": {
-  ".read": "auth.uid === '<UID admin>'",
-  ".write": "auth.uid === '<UID admin>'",
-  "$uid": {
-    ".read": "auth != null && auth.uid === $uid"
-  }
-}
-```
-Tant que cette règle n'est pas ajoutée, un utilisateur approuvé mais non-admin reste bloqué sur
+**Prérequis règles RTDB** pour que le cas "utilisateur approuvé non-admin" fonctionne : la règle
+`approvedUsers/$uid` en lecture-de-soi-même (publiée le 2026-08-07/08 dans Firebase Console — voir
+le bloc de règles canonique et les deux "Pièges corrigés" dans la section Synchronisation cloud
+plus haut). Tant qu'elle n'est pas publiée, un utilisateur approuvé mais non-admin reste bloqué sur
 l'écran "Accès non autorisé" côté outil admin (son accès aux personnages via `characterAccess`
 dans l'app `index.html` n'est lui pas affecté, ces règles sont indépendantes).
 
