@@ -1938,7 +1938,7 @@ function renderAccess() {
 
 function fbLoadPersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Ceci remplace dans cet outil admin le profil et le Grimoire de "' + CHARACTER_NAMES[charId] + '" par ce qui est actuellement sauvegarde dans bdd.json sur Firebase. Vos modifications non sauvegardees ici seront perdues. Continuer ?')) return;
+  if (!confirm('Charger "' + CHARACTER_NAMES[charId] + '" depuis Firebase ?')) return;
   showToast('Chargement depuis Firebase...');
   fbLoadCharacterEntry(charId).then(function (entry) {
     if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Firebase.');
@@ -1961,7 +1961,7 @@ function fbLoadPersonnage() {
 
 function fbSavePersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Ceci ecrase dans bdd.json sur Firebase la sauvegarde "' + CHARACTER_NAMES[charId] + '" (profil ET grimoire) avec le contenu actuel de cet outil admin : profil frais (PV au max, emplacements/ressources non utilises) et grimoire tel qu\'edite ici. Toute progression en jeu deja sauvegardee par un joueur pour ce personnage sera perdue. Continuer ?')) return;
+  if (!confirm('Sauvegarder "' + CHARACTER_NAMES[charId] + '" sur Firebase ?')) return;
   var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) } };
   showToast('Sauvegarde sur Firebase...');
   fbSaveCharacterEntry(charId, payload).then(function () {
