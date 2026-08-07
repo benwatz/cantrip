@@ -1938,7 +1938,7 @@ function renderAccess() {
 
 function fbLoadPersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Charger "' + CHARACTER_NAMES[charId] + '" depuis Firebase ?')) return;
+  if (!confirm('Charger "' + CHARACTER_NAMES[charId] + '" ?')) return;
   showToast('Chargement depuis Firebase...');
   fbLoadCharacterEntry(charId).then(function (entry) {
     if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Firebase.');
@@ -1961,7 +1961,7 @@ function fbLoadPersonnage() {
 
 function fbSavePersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Sauvegarder "' + CHARACTER_NAMES[charId] + '" sur Firebase ?')) return;
+  if (!confirm('Sauvegarder "' + CHARACTER_NAMES[charId] + '" ?')) return;
   var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) } };
   showToast('Sauvegarde sur Firebase...');
   fbSaveCharacterEntry(charId, payload).then(function () {
