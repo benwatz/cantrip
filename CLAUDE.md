@@ -821,52 +821,6 @@ toute nouvelle machine doit utiliser le nouveau nom ci-dessus.
 
 ## Reste à faire / pistes non traitées
 
-### Plan "personnages partageables à d'autres tables" (mis en pause 2026-08-07, ne pas relancer une planification à zéro le jour où le besoin redevient concret)
-
-Objectif porté par l'utilisateur : permettre à d'autres tables/joueurs (inconnus, pas seulement
-Calix/Deneor gérés par l'utilisateur) de créer et gérer leurs propres personnages, sans dépendre du
-compte cloud personnel de l'utilisateur (jugé trop faible pour du multi-table : fichier unique,
-pas d'isolation, écrasement complet, limite d'utilisateurs externes OAuth). Diagnostic retenu à
-l'époque : Firestore (ou équivalent) est nécessaire pour la vraie isolation entre tables.
-
-**Mise à jour (2026-08-07)** : une isolation **par personnage** (pas par table) a finalement été
-ajoutée côté RTDB — voir section Synchronisation cloud, `characterOwners`/`characterAccess`. Ça
-répond au besoin immédiat de l'utilisateur (que chaque joueur approuvé ne voie que ses propres
-personnages) sans remplacer ce plan multi-tables : il n'y a toujours qu'un seul projet Firebase
-partagé, pas de notion de "table"/groupe de joueurs, et l'admin reste un point de passage manuel
-obligé pour approuver chaque joueur et chaque accès personnage par personnage. Reste donc
-pertinent si le besoin réapparaît de vraies tables indépendantes et auto-gérées par leurs MJ.
-
-1. ✅ **Grimoire : code → donnée** (fait, commit `b2037a4`) — `state.characters[id].grimoire`
-   éditable en jeu via Paramètres → "Paramétrer le Grimoire" (éditeur complet sections/sorts),
-   fallback `characterGrimoire()` corrigé pour ne plus retomber sur le grimoire de Calix pour un
-   ID inconnu.
-2. ✅ **CRUD personnages en local** (fait, commit `8dbb1b5`) — `state.characterOrder` dynamique,
-   créer/activer/supprimer un personnage, avatar générique sans portrait. Toujours 100%
-   `localStorage`, aucun partage entre appareils pour un personnage créé dynamiquement.
-3. ⏸️ **Modèle Firestore multi-tables + règles de sécurité** — mis en pause le 2026-08-07 :
-   l'utilisateur a choisi de migrer d'abord Google Drive vers **Firebase Realtime Database** (voir
-   section Synchronisation cloud plus haut) pour son usage personnel actuel (Calix/Deneor, ses
-   propres appareils), plutôt que de construire directement le modèle multi-tables `tables/{code}/
-   characters/{id}` envisagé ici. Les deux approches partagent le même projet Firebase
-   (`cantrip-e90fd`) mais des backends différents (RTDB vs Firestore) et des modèles d'auth
-   différents (compte Google réel + liste blanche `approvedUsers` vs auth anonyme + code de
-   table) — **si ce plan est repris**, il faudra décider explicitement comment (ou si) les deux
-   cohabitent plutôt que de supposer une continuité directe.
-4. ⬜ Brancher Firestore dans l'app — remplacer `fbLoadCharacterEntry()`/`fbSaveCharacterEntry()` (et leurs équivalents
-   dans `cantrip-admin.html`) par les appels Firestore correspondants, en gardant si possible la
-   même UX (modale de confirmation, `ui.fbBusy`/toast).
-5. ⬜ Migration one-shot des données existantes (RTDB `cantrip` → première table Firestore) pour
-   ne pas perdre Calix/Deneor.
-6. ⬜ Rodage à une table (l'utilisateur seul) puis ouverture à une deuxième table réelle pour
-   vérifier concrètement l'isolation des règles de sécurité, avant partage plus large.
-7. ⬜ (optionnel, plus tard) Retirer le code RTDB une fois Firestore stable, incrémenter
-   `CACHE_NAME` dans `sw.js`.
-
-Gratuité vérifiée avec l'utilisateur (juillet 2026) : oui à cette échelle (Firebase Spark gratuit
-largement suffisant pour quelques tables ; alternative Supabase free tier possible mais se met en
-pause après inactivité, moins adapté à un usage irrégulier).
-
 - Personnages créés dynamiquement : pas de renommage après création, pas d'édition de
   sous-titre/niveau/portrait dans l'UI (contrairement à Calix/Deneor, ces champs n'ont aucun
   formulaire dédié pour l'instant).
