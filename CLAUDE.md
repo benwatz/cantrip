@@ -831,9 +831,31 @@ du fichier, devenu mort.
 - `.adm-charswitch` (2026-08-08, remplace les deux chips pleine-largeur Calix/Deneor) : un unique
   `<select id="charSelect">` étiqueté "Personnage" plutôt qu'une rangée de boutons — pensé pour ne
   pas s'encombrer visuellement le jour où l'outil gérera plus de deux personnages (les chips
-  grandissaient linéairement avec leur nombre). **Rendu à l'identique dans les modes Personnages et
+  grandissaient linéairement avec leur nombre). Le `<select>` est en `appearance:none` avec son
+  propre chevron dessiné en CSS (`.charselect-wrap::after`, un coin de bordure pivoté) plutôt que la
+  flèche native du navigateur — décalé de 16px du bord droit (`right:16px`) au lieu d'être collé au
+  bord, corrigé après un retour utilisateur sur l'apparence trop serrée de la flèche native.
+  **Rendu à l'identique dans les modes Personnages et
   Grimoires** (même bloc de code dans `render()`, aucune divergence entre les deux), masqué en mode
   Accès où il n'a pas de sens (ce panneau gère déjà tous les personnages dans son propre tableau).
+  Un bouton "+" compact à côté du sélecteur (`#btnCreateChar`, 2026-08-08) ouvre un `prompt()`
+  natif pour le nom et appelle `createCharacter()` : génère un id (`generateAdminCharacterId()`,
+  préfixe `char_` — même schéma que `generateCharacterId()` de `index.html`, mais **aucun lien
+  automatique** entre les deux, ce sont deux `state` indépendants) et un personnage vide (grimoire
+  `[]`, profil par défaut via `sanitizeAdminProfile({})`), l'ajoute à `state.characterOrder`/
+  `state.characterNames` (nouveaux champs persistés, absents des sauvegardes locales antérieures à
+  cette date — `loadState()` les reconstruit avec seulement Calix/Deneor si absents) et bascule
+  dessus. `CHARACTER_NAMES` (Calix/Deneor codés en dur) reste la seed de `state.characterNames` et
+  le repli ultime ; tout affichage de nom de personnage passe désormais par `characterLabel(charId)`
+  plutôt que `CHARACTER_NAMES[charId]` directement, pour couvrir les personnages créés ici.
+  Rien de spécifique à faire pour que ce nouveau personnage soit jouable dans l'app : il faut
+  "Sauvegarder" une fois depuis l'outil admin pour le publier sur Firebase sous cet id (voir
+  Synchronisation cloud plus bas) — l'app ne le verra que si un joueur crée en parallèle un
+  personnage avec ce même id (ce que l'app ne permet pas de choisir), donc dans la pratique ce
+  bouton sert surtout à préparer/tester un personnage côté admin avant de le distribuer autrement.
+  `resetPersonnage()` a été corrigé pour ne réinitialiser que `state.profiles.calix`/`.deneor` (les
+  deux seuls à avoir un seed vers lequel revenir) plutôt que tout `state.profiles` — avant ce
+  correctif, "Réinitialiser les Personnages" effaçait aussi les personnages créés via ce bouton.
 - `.adm-toolbar` (`renderPanelToolbar()`, remplace l'ancien `#sidePanel` "Comment ça marche" à côté
   du mockup téléphone) : actions rapides contextuelles au mode affiché ("Gérer les niveaux" /
   "Réinitialiser le Grimoire" en mode Grimoires, "Réinitialiser les Personnages" en mode

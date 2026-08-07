@@ -104,9 +104,16 @@
     display:flex;align-items:center;gap:10px;padding:12px 20px 0;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;
   }
   .charselect-label{flex:none;font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;}
+  .charselect-wrap{flex:1;position:relative;}
   .charselect{
-    flex:1;height:40px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;
+    appearance:none;-webkit-appearance:none;-moz-appearance:none;
+    width:100%;height:40px;padding:0 34px 0 12px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;
     border:1px solid rgba(var(--border-tint),0.3);color:var(--text-main);background:var(--bg-card);font-family:inherit;
+  }
+  .charselect-wrap::after{
+    content:'';position:absolute;right:16px;top:50%;width:7px;height:7px;
+    border-right:2px solid var(--text-label);border-bottom:2px solid var(--text-label);
+    transform:translateY(-65%) rotate(45deg);pointer-events:none;
   }
 
   .adm-content{
@@ -729,8 +736,20 @@ function cloneSeed() {
   return {
     calix: JSON.parse(JSON.stringify(SEED_CALIX)).sections,
     deneor: JSON.parse(JSON.stringify(SEED_DENEOR)).sections,
-    profiles: cloneSeedProfiles()
+    profiles: cloneSeedProfiles(),
+    characterOrder: ['calix', 'deneor'],
+    characterNames: Object.assign({}, CHARACTER_NAMES)
   };
+}
+
+// Libellé affiché d'un personnage : state.characterNames est la source vivante (couvre Calix/
+// Deneor et tout personnage créé dans l'outil admin), CHARACTER_NAMES le repli historique.
+function characterLabel(charId) {
+  return (state.characterNames && state.characterNames[charId]) || CHARACTER_NAMES[charId] || charId;
+}
+
+function generateAdminCharacterId() {
+  return 'char_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 }
 
 var state;
@@ -747,6 +766,16 @@ function loadState() {
           else sanitizeAdminProfile(parsed.profiles[c]);
         });
       }
+      // Sauvegarde antérieure à l'ajout de la création de personnage (2026-08-08) : pas de
+      // characterOrder/characterNames encore, on les reconstruit avec seulement Calix/Deneor.
+      if (!Array.isArray(parsed.characterOrder) || !parsed.characterOrder.length) parsed.characterOrder = ['calix', 'deneor'];
+      if (!parsed.characterNames || typeof parsed.characterNames !== 'object') parsed.characterNames = Object.assign({}, CHARACTER_NAMES);
+      parsed.characterOrder.forEach(function (id) {
+        if (!parsed.characterNames[id]) parsed.characterNames[id] = CHARACTER_NAMES[id] || id;
+        if (!Array.isArray(parsed[id])) parsed[id] = [];
+        if (!parsed.profiles[id] || typeof parsed.profiles[id] !== 'object') parsed.profiles[id] = sanitizeAdminProfile({});
+        else sanitizeAdminProfile(parsed.profiles[id]);
+      });
       return parsed;
     }
   } catch (e) {}
@@ -754,6 +783,27 @@ function loadState() {
 }
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { showToast('Erreur de sauvegarde locale', true); }
+}
+
+// Crée un personnage vide (grimoire sans section, profil par défaut) dans cet outil admin, sur ce
+// seul navigateur — même id que le schéma de l'app (`char_...`) pour rester lisible, mais sans
+// lien automatique avec un personnage créé dans l'app : il faudra "Sauvegarder" pour le publier sur
+// Firebase sous ce même id si un joueur doit ensuite le charger.
+function createCharacter() {
+  var name = prompt('Nom du nouveau personnage :');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) return;
+  var id = generateAdminCharacterId();
+  state.characterNames[id] = name;
+  state.characterOrder.push(id);
+  state[id] = [];
+  state.profiles[id] = sanitizeAdminProfile({});
+  ui.activeChar = id;
+  ui.activeLevel = null;
+  saveState();
+  render();
+  showToast('Personnage créé', 'success');
 }
 
 function activeSections() { return state[ui.activeChar]; }
@@ -812,14 +862,18 @@ function render() {
   sw.style.display = ui.mode === 'acces' ? 'none' : 'flex';
   if (ui.mode !== 'acces') {
     sw.innerHTML = '<label class="charselect-label" for="charSelect">Personnage</label>' +
-      '<select id="charSelect" class="charselect">' +
-      ['calix', 'deneor'].map(function (c) {
-        return '<option value="' + c + '"' + (ui.activeChar === c ? ' selected' : '') + '>' + escapeHtml(CHARACTER_NAMES[c]) + '</option>';
-      }).join('') +
-      '</select>';
+      '<div class="charselect-wrap">' +
+        '<select id="charSelect" class="charselect">' +
+          state.characterOrder.map(function (c) {
+            return '<option value="' + c + '"' + (ui.activeChar === c ? ' selected' : '') + '>' + escapeHtml(characterLabel(c)) + '</option>';
+          }).join('') +
+        '</select>' +
+      '</div>' +
+      '<button class="btn small" id="btnCreateChar" title="Créer un personnage">+</button>';
     document.getElementById('charSelect').addEventListener('change', function () {
       ui.activeChar = this.value; ui.activeLevel = null; render();
     });
+    document.getElementById('btnCreateChar').addEventListener('click', createCharacter);
   }
 
   // onglets de navigation (Personnages / Grimoires / Accès — Accès réservé à l'admin)
@@ -1043,7 +1097,7 @@ function renderPersonnage() {
     '</div></div>';
 
   document.getElementById('personPanel').innerHTML =
-    '<div class="person-title font-cinzel">Personnage — ' + escapeHtml(CHARACTER_NAMES[ui.activeChar]) + '</div>' +
+    '<div class="person-title font-cinzel">Personnage — ' + escapeHtml(characterLabel(ui.activeChar)) + '</div>' +
     hpHtml + combatHtml + togglesHtml + attacksHtml + spellLevelsHtml + classResourcesHtml +
     abilitiesHtml + savingThrowsHtml + skillsHtml + goldHtml;
 
@@ -1426,7 +1480,12 @@ function resetGrimoire() {
 }
 function resetPersonnage() {
   if (!confirm('Reinitialiser vos modifications de Personnage (les deux) et repartir des donnees actuellement en ligne dans Cantrip ? Cette action efface vos ajouts non exportes.')) return;
-  state.profiles = cloneSeedProfiles();
+  // Ne touche que Calix/Deneor (les seuls à avoir un seed) : ne pas écraser les profils des
+  // personnages créés dans l'outil, qui n'ont pas de "données en ligne dans Cantrip" vers
+  // lesquelles revenir.
+  var fresh = cloneSeedProfiles();
+  state.profiles.calix = fresh.calix;
+  state.profiles.deneor = fresh.deneor;
   saveState();
   ui.levelError = '';
   render();
@@ -1484,7 +1543,7 @@ document.addEventListener('keydown', function (e) {
 function deriveFullProfile(charId) {
   var p = state.profiles[charId];
   return {
-    characterName: CHARACTER_NAMES[charId],
+    characterName: characterLabel(charId),
     hp: { current: p.hp.current, max: p.hp.max, temp: p.hp.temp },
     combatStats: { ac: p.combatStats.ac, initiative: p.combatStats.initiative, speed: p.combatStats.speed, spellSaveDc: p.combatStats.spellSaveDc, spellAttackBonus: p.combatStats.spellAttackBonus, hitDice: p.combatStats.hitDice },
     spellLevels: p.spellLevels.map(function (l) {
@@ -1916,7 +1975,7 @@ function renderAccess() {
 
 function fbLoadPersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Charger "' + CHARACTER_NAMES[charId] + '" ?')) return;
+  if (!confirm('Charger "' + characterLabel(charId) + '" ?')) return;
   showToast('Chargement depuis Firebase...');
   fbLoadCharacterEntry(charId).then(function (entry) {
     if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Firebase.');
@@ -1939,7 +1998,7 @@ function fbLoadPersonnage() {
 
 function fbSavePersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Sauvegarder "' + CHARACTER_NAMES[charId] + '" ?')) return;
+  if (!confirm('Sauvegarder "' + characterLabel(charId) + '" ?')) return;
   var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) } };
   showToast('Sauvegarde sur Firebase...');
   fbSaveCharacterEntry(charId, payload).then(function () {
@@ -1973,7 +2032,7 @@ function renderSyncFooter(meta) {
   meta = meta || {};
   function line(label, entry) {
     if (!entry || !entry.at) return label + ' : jamais';
-    var charName = CHARACTER_NAMES[entry.charId] || entry.charId;
+    var charName = characterLabel(entry.charId);
     var src = SYNC_SOURCE_LABELS[entry.source] || entry.source;
     return label + ' : ' + formatSyncDate(entry.at) + ' — ' + charName + ' (' + src + ')';
   }
