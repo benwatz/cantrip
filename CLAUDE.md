@@ -453,9 +453,10 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
   actuellement affiché dans le carrousel).
   "Activer" (local) et "Charger"/"Sauvegarder" (Firebase) sont volontairement deux mécanismes
   distincts : activer ne fait que basculer quel personnage est actif *sur cet appareil*, charger/
-  sauvegarder synchronise avec **Firebase Realtime Database** (nœud `cantrip`, mêmes fonctions
-  `fbLoadBdd()`/`fbSaveBdd()` que dans `cantrip-admin.html`, voir section Synchronisation cloud
-  plus bas — migré depuis Google Drive en août 2026, voir Historique dans cette section) pour
+  sauvegarder synchronise avec **Firebase Realtime Database** (nœud `cantrip/{charId}`, mêmes
+  fonctions `fbLoadCharacterEntry()`/`fbSaveCharacterEntry()` que dans `cantrip-admin.html`,
+  voir section Synchronisation cloud plus bas — migré depuis Google Drive en août 2026, accès
+  restreint par personnage depuis le même jour, voir Historique dans cette section) pour
   partager entre appareils — les personnages créés dynamiquement ne participent à ce second
   mécanisme que si quelqu'un les sauvegarde explicitement sur Firebase (rien d'automatique).
   Les flèches gauche/droite (`data-action="character-carousel-step"`) sont volontairement à la
@@ -603,22 +604,30 @@ Stockage cloud des personnages (profil + Grimoire), utilisé par les pages "Char
 première implémentation basée sur l'API Google Drive (voir Historique ci-dessous).
 
 - **Backend** : Firebase **Realtime Database**, projet `cantrip-e90fd`, région `europe-west1`. Un
-  seul nœud racine `cantrip` contenant `{ calix: { profile, grimoire }, deneor: { profile,
-  grimoire }, _meta: {...} }` — équivalent direct de l'ancien `bdd.json` sur Drive, même schéma
-  imbriqué.
+  nœud racine `cantrip` où chaque enfant `cantrip/{charId}` (`{ profile, grimoire }`) est un
+  personnage — équivalent direct de l'ancien `bdd.json` sur Drive, mais désormais lu/écrit **par
+  personnage** (`cantrip/{charId}` directement, plus `cantrip` en entier) depuis que l'accès est
+  restreint par personnage (voir ci-dessous) ; `cantrip/_meta` est un enfant à part, réservé aux
+  métadonnées de synchro de l'outil admin (dernier chargement/sauvegarde), pas un personnage.
 - **Auth** : Firebase Authentication, provider Google (`signInWithPopup`), session persistée par
   le SDK (IndexedDB) — pas de ré-authentification à chaque lancement contrairement à l'ancien
   jeton OAuth Drive qui expirait au bout d'une heure.
-- **Règles de sécurité RTDB** : liste blanche `approvedUsers` (nœud racine, `{ [uid]: true }`),
-  resserrée le 2026-08-07 après une première version ouverte à "tout utilisateur connecté" jugée
-  trop permissive (n'importe quel compte Google tombant sur l'URL publique de l'app aurait pu
-  écraser les données) :
+- **Règles de sécurité RTDB — accès par personnage** (resserré le 2026-08-07, en deux temps :
+  d'abord une liste blanche globale `approvedUsers`, jugée encore trop large car elle donnait accès
+  à **tous** les personnages une fois approuvé ; puis, le même jour, un accès **par personnage**
+  pour qu'un joueur approuvé ne voie que les siens) :
   ```json
   {
     "rules": {
       "cantrip": {
-        ".read": "auth != null && root.child('approvedUsers').child(auth.uid).val() === true",
-        ".write": "auth != null && root.child('approvedUsers').child(auth.uid).val() === true"
+        "_meta": {
+          ".read": "auth.uid === '<UID admin>'",
+          ".write": "auth.uid === '<UID admin>'"
+        },
+        "$charId": {
+          ".read": "auth != null && root.child('approvedUsers').child(auth.uid).val() === true && (auth.uid === '<UID admin>' || root.child('characterAccess').child($charId).child(auth.uid).val() === true)",
+          ".write": "auth != null && root.child('approvedUsers').child(auth.uid).val() === true && (auth.uid === '<UID admin>' || (!data.exists() && newData.exists()) || (root.child('characterAccess').child($charId).child(auth.uid).val() === true && (newData.exists() || root.child('characterOwners').child($charId).val() === auth.uid)))"
+        }
       },
       "approvedUsers": {
         ".read": "auth.uid === '<UID admin>'",
@@ -628,6 +637,20 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
         ".read": "auth.uid === '<UID admin>'",
         ".write": "auth.uid === '<UID admin>'"
       },
+      "characterOwners": {
+        ".read": "auth.uid === '<UID admin>'",
+        "$charId": {
+          ".write": "auth.uid === '<UID admin>' || (auth != null && root.child('approvedUsers').child(auth.uid).val() === true && !data.exists() && newData.val() === auth.uid)"
+        }
+      },
+      "characterAccess": {
+        ".read": "auth.uid === '<UID admin>'",
+        "$charId": {
+          "$uid": {
+            ".write": "auth.uid === '<UID admin>' || (auth != null && auth.uid === $uid && !data.exists() && newData.val() === true && root.child('characterOwners').child($charId).val() === auth.uid)"
+          }
+        }
+      },
       "accessRequests": {
         ".read": "auth.uid === '<UID admin>'",
         "$uid": { ".write": "auth != null && auth.uid === $uid" }
@@ -635,38 +658,65 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
     }
   }
   ```
-  Seul l'UID admin (l'utilisateur, codé en dur dans les règles côté Firebase Console — **pas**
-  dans le JS client) peut lire/écrire `approvedUsers`/`approvedUserInfo` et lire `accessRequests` ;
-  n'importe quel utilisateur connecté peut écrire **sa propre** entrée sous `accessRequests/{son
-  uid}` (mais pas la lire), ce qui alimente le flux de demande d'accès ci-dessous.
-  **Flux de demande d'accès** (ajouté 2026-08-07, pour éviter d'avoir à copier-coller un UID à la
-  main dans la console à chaque nouvel utilisateur) : `fbRequestAccess(user)` (`index.html`) écrit
-  `accessRequests/{uid} = { email, name, requestedAt }` à chaque `fbEnsureAuth()` réussi — que
-  l'utilisateur soit déjà approuvé ou non, l'écriture réussit toujours (règle ci-dessus) ; ce n'est
-  qu'un signal, pas une porte d'accès. Si l'utilisateur n'est pas encore dans `approvedUsers`, ses
-  tentatives de lecture/écriture sur `cantrip` échouent avec `err.code === 'PERMISSION_DENIED'`
-  (RTDB), traduit côté UI par `fbFriendlyError()` en un message convivial plutôt que l'erreur brute
-  ("Compte connecté mais pas encore approuvé... Une demande d'accès a été envoyée").
+  Trois niveaux de vérification pour lire/écrire un personnage : (1) approuvé globalement
+  (`approvedUsers`, flux de demande d'accès inchangé, voir plus bas), (2) admin (bypass complet,
+  `auth.uid === '<UID admin>'`) **ou** avoir un accès explicite à ce personnage précis
+  (`characterAccess/{charId}/{uid} === true`), (3) pour une **suppression** (`newData` absent, donc
+  `!newData.exists()`) uniquement, être en plus le **créateur** du personnage
+  (`characterOwners/{charId} === auth.uid`) — un joueur autorisé à éditer un personnage ne peut pas
+  forcément le supprimer, seul son créateur (ou l'admin) le peut.
+  **Amorçage** (`!data.exists() && newData.exists()`, clause dédiée dans `.write` de `cantrip/
+  $charId`) : n'importe quel utilisateur approuvé peut créer un **nouveau** personnage sur Firebase
+  (première sauvegarde d'un personnage jamais encore synchronisé) — sans cette clause, il faudrait
+  que l'admin connaisse et autorise à l'avance chaque `charId`, ce qui est impossible pour un
+  personnage créé dynamiquement dans l'app (`state.characterOrder`, voir section Personnages) que
+  l'admin n'a jamais vu. Cette première écriture n'accorde l'accès à personne d'autre qu'à
+  l'admin : c'est `fbClaimOwnership()` (`index.html`, appelée juste après une sauvegarde réussie
+  sur un personnage inexistant côté Firebase) qui enregistre ensuite explicitement
+  `characterOwners/{charId} = uid` et `characterAccess/{charId}/{uid} = true` pour que
+  l'utilisateur puisse relire/réécrire ce personnage par la suite — sans ça, même son créateur
+  perdrait l'accès dès la sauvegarde suivante. Écriture best-effort (Promise.all, catch silencieux)
+  : un échec (ex. quelqu'un d'autre a réclamé la propriété entre-temps) ne fait pas échouer la
+  sauvegarde elle-même, déjà acquise.
+  Le **repli en lecture** de `performFbSave()` (`index.html`) — lire l'entrée existante avant
+  d'écraser pour préserver le Grimoire distant si besoin, voir plus bas — traite volontairement un
+  échec `PERMISSION_DENIED` sur cette lecture comme "n'existe pas encore" plutôt que comme une
+  erreur fatale, car RTDB ne distingue pas côté client "interdit" de "n'existe pas" (mesure
+  anti-fuite d'information standard) : c'est l'écriture qui suit qui fait foi (elle échoue à son
+  tour si le personnage appartient réellement à quelqu'un d'autre).
+  **Flux de demande d'accès global** (ajouté 2026-08-07, pour éviter d'avoir à copier-coller un UID
+  à la main dans la console à chaque nouvel utilisateur) : `fbRequestAccess(user)` (`index.html`)
+  écrit `accessRequests/{uid} = { email, name, requestedAt }` à chaque `fbEnsureAuth()` réussi —
+  approuvé ou non, l'écriture réussit toujours (règle ci-dessus) ; ce n'est qu'un signal, pas une
+  porte d'accès. Erreurs `PERMISSION_DENIED` traduites côté UI par `fbFriendlyError()` en message
+  convivial plutôt que l'erreur brute.
   Le panneau **"Accès"** de `cantrip-admin.html` (troisième bouton du topbar, entre "Grimoire" et
-  "Charger", `ui.mode = 'acces'`, `renderAccess()`) liste les demandes en attente (bouton
-  **Autoriser** → `approvedUsers/{uid} = true` + copie de `email`/`name` de la demande dans
-  `approvedUserInfo/{uid}` (voir juste en dessous) + suppression de la demande ; **Refuser** →
-  suppression de la demande seule) et les utilisateurs déjà approuvés (email/nom affichés s'ils
-  sont connus, sinon repli sur l'UID seul — cas d'un UID ajouté à la main via la console plutôt que
-  via ce flux, comme le tout premier utilisateur admin ; bouton **Retirer** → suppression de
-  `approvedUsers/{uid}` **et** `approvedUserInfo/{uid}`, avec confirmation native vu le caractère
-  destructif). `approvedUserInfo` existe séparément d'`approvedUsers` car la règle d'accès à
-  `cantrip` teste `approvedUsers/{uid}.val() === true` littéralement — impossible d'y stocker un
-  objet `{ email, name }` sans casser cette règle, d'où un second nœud dédié à l'affichage,
-  peuplé uniquement au moment de l'approbation (la demande source dans `accessRequests` étant
-  supprimée juste après, `approvedUserInfo` est la seule trace persistante de l'email d'un
-  utilisateur approuvé).
-  `fbLoadAccessData()`/`fbApproveAccess()`/`fbDenyAccess()`/`fbRevokeAccess()` sont propres à
-  `cantrip-admin.html` (pas dans `index.html`, qui ne fait qu'émettre des demandes, jamais les
-  gérer). Le panneau latéral "Comment ça marche" (`#sidePanel`, commun aux modes Personnage/
-  Grimoire) est masqué en mode Accès (`renderSidePanel()` retourne tôt avec `display:none` si
-  `ui.mode === 'acces'`) — son contenu (explications Personnage/Grimoire, boutons de
-  réinitialisation) n'a pas de sens pour la gestion des accès.
+  "Charger", `ui.mode = 'acces'`, `renderAccess()`) a trois sections :
+  - **Demandes en attente** : **Autoriser** (`fbApproveAccess()`) → `approvedUsers/{uid} = true` +
+    copie `email`/`name` dans `approvedUserInfo/{uid}` (nécessaire car `approvedUsers/{uid}` doit
+    rester un booléen strict, imposé par les règles ci-dessus — impossible d'y stocker un objet) +
+    suppression de la demande ; **Refuser** (`fbDenyAccess()`) → suppression de la demande seule.
+  - **Utilisateurs approuvés** : email/nom si connus (repli sur l'UID seul pour un UID ajouté à la
+    main via la console avant ce système, comme le tout premier utilisateur admin) ; **Retirer**
+    (`fbRevokeAccess()`) → accès global retiré (`approvedUsers`/`approvedUserInfo` supprimés) —
+    **ne retire pas** les accès par personnage (`characterAccess`), qui restent en base mais
+    deviennent inertes tant que l'utilisateur n'est pas ré-approuvé.
+  - **Personnages (accès par joueur)** (ajouté 2026-08-07, `fbLoadAccessData()` étendu pour aussi
+    lire `cantrip`, `characterOwners`, `characterAccess`, exposés dans `ui.accessCharacters`) : une
+    carte par personnage trouvé sous `cantrip` (nom depuis `profile.characterName`, repli sur le
+    `charId`) avec un `<select>` **Propriétaire** (`fbSetCharacterOwner()`, écrit/efface
+    `characterOwners/{charId}` — changer le propriétaire est une action admin explicite, distincte
+    de l'amorçage automatique décrit plus haut) et une case à cocher par utilisateur approuvé
+    (`fbToggleCharacterAccess()`, écrit/efface `characterAccess/{charId}/{uid}`) ; bouton
+    **Supprimer** (`fbDeleteCharacterFirebase()`, `confirm()` natif) qui efface `cantrip/{charId}`
+    **et** `characterOwners`/`characterAccess` associés — irréversible, ne touche jamais la copie
+    locale d'un joueur (`state.characters`, propre à chaque appareil).
+  `fbLoadAccessData()`/`fbApproveAccess()`/`fbDenyAccess()`/`fbRevokeAccess()`/
+  `fbSetCharacterOwner()`/`fbToggleCharacterAccess()`/`fbDeleteCharacterFirebase()` sont propres à
+  `cantrip-admin.html` (pas dans `index.html`, qui ne fait qu'émettre des demandes et revendiquer
+  la propriété d'un nouveau personnage, jamais gérer les accès d'autrui). Le panneau latéral
+  "Comment ça marche" (`#sidePanel`, commun aux modes Personnage/Grimoire) est masqué en mode Accès
+  (`renderSidePanel()` retourne tôt avec `display:none` si `ui.mode === 'acces'`).
 - **Config client** (`FIREBASE_CONFIG`, dupliquée dans `index.html` et `cantrip-admin.html`,
   même convention que le reste des constantes de sync) : n'est pas un secret, comme l'ancien
   Client ID OAuth Drive — les règles RTDB ci-dessus sont la vraie barrière d'accès, pas la config.
@@ -675,12 +725,14 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   modules du SDK v9+ — choisi pour rester cohérent avec le style `<script>` classique du projet
   (pas de build step, pas de `type="module"`).
 - Fonctions bas niveau : `fbEnsureAuth()` (popup Google si pas déjà connecté, déclenche aussi
-  `fbRequestAccess()` — voir demande d'accès ci-dessous), `fbLoadBdd()` (lecture simple du nœud),
-  `fbSaveBdd(mutateFn)` (écriture via `transaction()` RTDB plutôt qu'un read-then-write manuel,
-  pour fusionner avec l'autre personnage et rester correct en cas d'écriture concurrente depuis un
-  autre appareil, l'échec de commit étant retagué `err.code = 'PERMISSION_DENIED'` pour un
-  traitement uniforme par `fbFriendlyError()`) — dupliquées dans les deux fichiers, comme le reste
-  de la synchro.
+  `fbRequestAccess()`), `fbLoadCharacterEntry(charId)`/`fbSaveCharacterEntry(charId, entry)`
+  (lecture/écriture d'un seul `cantrip/{charId}`, dupliquées dans les deux fichiers) — remplacent
+  depuis le passage à l'accès par personnage un ancien `fbLoadBdd()`/`fbSaveBdd(mutateFn)` qui
+  lisait/écrivait tout le nœud `cantrip` via une `transaction()` RTDB pour fusionner les
+  personnages entre eux ; ce n'est plus nécessaire ni même possible (les règles de sécurité sont
+  désormais définies **par** `$charId`, une transaction sur le nœud parent `cantrip` entier ne
+  correspond plus à un seul personnage). `cantrip-admin.html` a en plus `fbLoadMeta()`/
+  `fbSaveMeta(meta)` dédiées à `cantrip/_meta` (métadonnées de synchro, admin uniquement).
 
 **Historique : migration depuis Google Drive (2026-08-07).** L'implémentation initiale (2026-07-23)
 stockait `bdd.json` sur Google Drive via l'API REST + OAuth (`drive` scope, dossier "Cantrip"
@@ -777,6 +829,14 @@ compte cloud personnel de l'utilisateur (jugé trop faible pour du multi-table :
 pas d'isolation, écrasement complet, limite d'utilisateurs externes OAuth). Diagnostic retenu à
 l'époque : Firestore (ou équivalent) est nécessaire pour la vraie isolation entre tables.
 
+**Mise à jour (2026-08-07)** : une isolation **par personnage** (pas par table) a finalement été
+ajoutée côté RTDB — voir section Synchronisation cloud, `characterOwners`/`characterAccess`. Ça
+répond au besoin immédiat de l'utilisateur (que chaque joueur approuvé ne voie que ses propres
+personnages) sans remplacer ce plan multi-tables : il n'y a toujours qu'un seul projet Firebase
+partagé, pas de notion de "table"/groupe de joueurs, et l'admin reste un point de passage manuel
+obligé pour approuver chaque joueur et chaque accès personnage par personnage. Reste donc
+pertinent si le besoin réapparaît de vraies tables indépendantes et auto-gérées par leurs MJ.
+
 1. ✅ **Grimoire : code → donnée** (fait, commit `b2037a4`) — `state.characters[id].grimoire`
    éditable en jeu via Paramètres → "Paramétrer le Grimoire" (éditeur complet sections/sorts),
    fallback `characterGrimoire()` corrigé pour ne plus retomber sur le grimoire de Calix pour un
@@ -793,7 +853,7 @@ l'époque : Firestore (ou équivalent) est nécessaire pour la vraie isolation e
    différents (compte Google réel + liste blanche `approvedUsers` vs auth anonyme + code de
    table) — **si ce plan est repris**, il faudra décider explicitement comment (ou si) les deux
    cohabitent plutôt que de supposer une continuité directe.
-4. ⬜ Brancher Firestore dans l'app — remplacer `fbLoadBdd()`/`fbSaveBdd()` (et leurs équivalents
+4. ⬜ Brancher Firestore dans l'app — remplacer `fbLoadCharacterEntry()`/`fbSaveCharacterEntry()` (et leurs équivalents
    dans `cantrip-admin.html`) par les appels Firestore correspondants, en gardant si possible la
    même UX (modale de confirmation, `ui.fbBusy`/toast).
 5. ⬜ Migration one-shot des données existantes (RTDB `cantrip` → première table Firestore) pour

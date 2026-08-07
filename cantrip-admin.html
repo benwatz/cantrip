@@ -720,7 +720,8 @@ var ui = {
   filters: { action: false, bonus: false, reaction: false },
   levelError: '', // message d'erreur d'activation d'un emplacement de sorts (mode Personnage)
   accessRequests: null, // null (jamais chargé) | tableau [{ uid, email, name, requestedAt }]
-  approvedUsers: null, // null (jamais chargé) | tableau [uid]
+  approvedUsers: null, // null (jamais chargé) | tableau [{ uid, email, name }]
+  accessCharacters: null, // null (jamais chargé) | tableau [{ charId, name, ownerUid, accessUids }]
   accessBusy: false,
   accessError: null
 };
@@ -1547,23 +1548,37 @@ function fbEnsureAuth() {
   });
 }
 
-function fbLoadBdd() {
+// Lecture/écriture ciblées sur cantrip/{charId} (pas le nœud "cantrip" entier) : chaque
+// personnage a ses propres règles de sécurité RTDB ($charId, voir Firebase Console). L'admin
+// passe outre via son UID (voir règles), mais ce ciblage reste nécessaire pour que le "Personnage"
+// choisi ne touche jamais accidentellement un autre personnage ni cantrip/_meta (métadonnées de
+// synchro, règle séparée — voir fbLoadMeta()/fbSaveMeta() plus bas).
+function fbLoadCharacterEntry(charId) {
   return fbEnsureAuth().then(function () {
-    return fbDb.ref(FB_DATA_PATH).once('value').then(function (snapshot) {
+    return fbDb.ref(FB_DATA_PATH + '/' + charId).once('value').then(function (snapshot) {
+      return snapshot.val();
+    });
+  });
+}
+
+function fbSaveCharacterEntry(charId, entry) {
+  return fbEnsureAuth().then(function () {
+    return fbDb.ref(FB_DATA_PATH + '/' + charId).set(entry);
+  });
+}
+
+function fbLoadMeta() {
+  return fbEnsureAuth().then(function () {
+    return fbDb.ref(FB_DATA_PATH + '/_meta').once('value').then(function (snapshot) {
       return snapshot.val() || {};
     });
   });
 }
 
-function fbSaveBdd(mutateFn) {
+function fbSaveMeta(meta) {
   return fbEnsureAuth().then(function () {
-    var updated = null;
-    return fbDb.ref(FB_DATA_PATH).transaction(function (current) {
-      updated = mutateFn(current || {});
-      return updated;
-    }).then(function (result) {
-      if (!result.committed) throw new Error('Ecriture refusee par les regles Firebase.');
-      return updated;
+    return fbDb.ref(FB_DATA_PATH + '/_meta').set(meta).then(function () {
+      return meta;
     });
   });
 }
@@ -1578,12 +1593,18 @@ function fbLoadAccessData() {
     return Promise.all([
       fbDb.ref('accessRequests').once('value'),
       fbDb.ref('approvedUsers').once('value'),
-      fbDb.ref('approvedUserInfo').once('value')
+      fbDb.ref('approvedUserInfo').once('value'),
+      fbDb.ref('cantrip').once('value'),
+      fbDb.ref('characterOwners').once('value'),
+      fbDb.ref('characterAccess').once('value')
     ]);
   }).then(function (results) {
     var requestsVal = results[0].val() || {};
     var approvedVal = results[1].val() || {};
     var infoVal = results[2].val() || {};
+    var cantripVal = results[3].val() || {};
+    var ownersVal = results[4].val() || {};
+    var accessVal = results[5].val() || {};
     ui.accessRequests = Object.keys(requestsVal).map(function (uid) {
       var r = requestsVal[uid] || {};
       return { uid: uid, email: r.email || '', name: r.name || '', requestedAt: r.requestedAt || 0 };
@@ -1592,11 +1613,63 @@ function fbLoadAccessData() {
       var info = infoVal[uid] || {};
       return { uid: uid, email: info.email || '', name: info.name || '' };
     });
+    // "_meta" n'est pas un personnage (métadonnées de synchro, voir fbLoadMeta()) — exclu ici.
+    ui.accessCharacters = Object.keys(cantripVal).filter(function (charId) { return charId !== '_meta'; }).map(function (charId) {
+      var entry = cantripVal[charId] || {};
+      var name = (entry.profile && entry.profile.characterName) || charId;
+      var accessMap = accessVal[charId] || {};
+      var accessUids = Object.keys(accessMap).filter(function (uid) { return accessMap[uid] === true; });
+      return { charId: charId, name: name, ownerUid: ownersVal[charId] || '', accessUids: accessUids };
+    }).sort(function (a, b) { return a.name.localeCompare(b.name); });
     ui.accessBusy = false;
     render();
   }).catch(function (err) {
     ui.accessBusy = false;
     ui.accessError = err.message || 'Echec du chargement des acces';
+    render();
+  });
+}
+
+function fbSetCharacterOwner(charId, uid) {
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return uid ? fbDb.ref('characterOwners/' + charId).set(uid) : fbDb.ref('characterOwners/' + charId).remove();
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec du changement de proprietaire";
+    render();
+  });
+}
+
+function fbToggleCharacterAccess(charId, uid, granted) {
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return granted ? fbDb.ref('characterAccess/' + charId + '/' + uid).set(true) : fbDb.ref('characterAccess/' + charId + '/' + uid).remove();
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || "Echec de la mise a jour de l'acces";
+    render();
+  });
+}
+
+function fbDeleteCharacterFirebase(charId, name) {
+  if (!confirm('Supprimer definitivement "' + name + '" de Firebase (profil, Grimoire, proprietaire et acces) ? Cette action est irreversible et ne touche pas la copie locale d\'un joueur.')) return;
+  ui.accessBusy = true; ui.accessError = null; render();
+  fbEnsureAuth().then(function () {
+    return Promise.all([
+      fbDb.ref('cantrip/' + charId).remove(),
+      fbDb.ref('characterOwners/' + charId).remove(),
+      fbDb.ref('characterAccess/' + charId).remove()
+    ]);
+  }).then(function () {
+    fbLoadAccessData();
+  }).catch(function (err) {
+    ui.accessBusy = false;
+    ui.accessError = err.message || 'Echec de la suppression';
     render();
   });
 }
@@ -1685,6 +1758,38 @@ function renderAccess() {
     '</div>';
   }).join('');
 
+  // Chaque personnage : propriétaire (seul à pouvoir le supprimer, en plus de l'admin — voir
+  // règles Firebase Console) via un <select>, et une case à cocher par utilisateur approuvé pour
+  // lui accorder/retirer l'accès en lecture/écriture à ce personnage précis.
+  var charactersHtml = (ui.accessCharacters || []).map(function (c) {
+    var ownerOptions = '<option value="">— Aucun —</option>' + (ui.approvedUsers || []).map(function (u) {
+      return '<option value="' + escapeHtml(u.uid) + '"' + (u.uid === c.ownerUid ? ' selected' : '') + '>' + escapeHtml(u.name || u.email || u.uid) + '</option>';
+    }).join('');
+    var accessRows = (ui.approvedUsers || []).map(function (u) {
+      var granted = c.accessUids.indexOf(u.uid) !== -1;
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;cursor:pointer;">' +
+        '<input type="checkbox" data-action="access-char-toggle" data-charid="' + escapeHtml(c.charId) + '" data-uid="' + escapeHtml(u.uid) + '"' + (granted ? ' checked' : '') + '/>' +
+        '<span>' + escapeHtml(u.name || u.email || u.uid) + '</span>' +
+      '</label>';
+    }).join('') || '<div class="empty-hint" style="padding:8px 0;">Aucun utilisateur approuvé à qui donner accès.</div>';
+    return '<div class="pcard" style="margin-bottom:10px;">' +
+      '<div class="prow" style="flex-direction:column;align-items:stretch;gap:8px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<div style="flex:1;font-size:13px;font-weight:600;color:var(--text-main);">' + escapeHtml(c.name) + '</div>' +
+          '<button class="btn danger small" data-action="access-char-delete" data-charid="' + escapeHtml(c.charId) + '" data-name="' + escapeHtml(c.name) + '">Supprimer</button>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);">' +
+          '<label for="owner-' + escapeHtml(c.charId) + '">Propriétaire (seul à pouvoir supprimer) :</label>' +
+          '<select id="owner-' + escapeHtml(c.charId) + '" data-action="access-char-owner" data-charid="' + escapeHtml(c.charId) + '" style="flex:1;">' + ownerOptions + '</select>' +
+        '</div>' +
+        '<div>' +
+          '<div style="font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Accès accordé à</div>' +
+          accessRows +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
   panel.innerHTML =
     '<div class="psec"><div class="psec-label">Gestion des accès Firebase</div></div>' +
     errorHtml + busyHtml +
@@ -1694,6 +1799,9 @@ function renderAccess() {
     '<div class="psec"><div class="psec-label">Utilisateurs approuvés</div><div class="pcard">' +
       (approvedHtml || '<div class="empty-hint">Aucun utilisateur approuvé pour l\'instant.</div>') +
     '</div></div>' +
+    '<div class="psec"><div class="psec-label">Personnages (accès par joueur)</div>' +
+      (charactersHtml || '<div class="empty-hint">Aucun personnage sur Firebase pour l\'instant.</div>') +
+    '</div>' +
     '<button class="btn" id="btnAccessRefresh">Actualiser</button>';
 
   var refreshBtn = document.getElementById('btnAccessRefresh');
@@ -1707,14 +1815,22 @@ function renderAccess() {
   panel.querySelectorAll('[data-action="access-revoke"]').forEach(function (el) {
     el.addEventListener('click', function () { fbRevokeAccess(el.getAttribute('data-uid')); });
   });
+  panel.querySelectorAll('[data-action="access-char-owner"]').forEach(function (el) {
+    el.addEventListener('change', function () { fbSetCharacterOwner(el.getAttribute('data-charid'), el.value); });
+  });
+  panel.querySelectorAll('[data-action="access-char-toggle"]').forEach(function (el) {
+    el.addEventListener('change', function () { fbToggleCharacterAccess(el.getAttribute('data-charid'), el.getAttribute('data-uid'), el.checked); });
+  });
+  panel.querySelectorAll('[data-action="access-char-delete"]').forEach(function (el) {
+    el.addEventListener('click', function () { fbDeleteCharacterFirebase(el.getAttribute('data-charid'), el.getAttribute('data-name')); });
+  });
 }
 
 function fbLoadPersonnage() {
   var charId = ui.activeChar;
   if (!confirm('Ceci remplace dans cet outil admin le profil et le Grimoire de "' + CHARACTER_NAMES[charId] + '" par ce qui est actuellement sauvegarde dans bdd.json sur Firebase. Vos modifications non sauvegardees ici seront perdues. Continuer ?')) return;
   showToast('Chargement depuis Firebase...');
-  fbLoadBdd().then(function (bdd) {
-    var entry = bdd && bdd[charId];
+  fbLoadCharacterEntry(charId).then(function (entry) {
     if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Firebase.');
     // Compat avec bdd.json ecrit avant l'ajout du grimoire : entry etait alors le profil
     // directement, sans cle "profile"/"grimoire".
@@ -1738,14 +1854,9 @@ function fbSavePersonnage() {
   if (!confirm('Ceci ecrase dans bdd.json sur Firebase la sauvegarde "' + CHARACTER_NAMES[charId] + '" (profil ET grimoire) avec le contenu actuel de cet outil admin : profil frais (PV au max, emplacements/ressources non utilises) et grimoire tel qu\'edite ici. Toute progression en jeu deja sauvegardee par un joueur pour ce personnage sera perdue. Continuer ?')) return;
   var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) } };
   showToast('Sauvegarde sur Firebase...');
-  fbSaveBdd(function (bdd) {
-    bdd[charId] = payload;
-    bdd._meta = bdd._meta || {};
-    bdd._meta.lastSave = { at: new Date().toISOString(), charId: charId, source: 'admin' };
-    return bdd;
-  }).then(function (bdd) {
+  fbSaveCharacterEntry(charId, payload).then(function () {
     showToast('Le personnage a été sauvegardé avec succès.', 'success');
-    updateSyncMetaDisplay(bdd._meta);
+    recordSyncEvent('lastSave', charId);
   }).catch(function (err) {
     showToast(err.message || 'Echec de la sauvegarde Firebase', true);
   });
@@ -1795,12 +1906,11 @@ function updateSyncMetaDisplay(meta) {
 // Ecriture best-effort d'un evenement de synchro (chargement) : n'affecte jamais le resultat de
 // l'action en cours si elle echoue.
 function recordSyncEvent(kind, charId) {
-  fbSaveBdd(function (bdd) {
-    bdd._meta = bdd._meta || {};
-    bdd._meta[kind] = { at: new Date().toISOString(), charId: charId, source: 'admin' };
-    return bdd;
-  }).then(function (bdd) {
-    updateSyncMetaDisplay(bdd._meta);
+  fbLoadMeta().then(function (meta) {
+    meta[kind] = { at: new Date().toISOString(), charId: charId, source: 'admin' };
+    return fbSaveMeta(meta);
+  }).then(function (meta) {
+    updateSyncMetaDisplay(meta);
   }).catch(function () { /* best-effort */ });
 }
 
@@ -1809,8 +1919,8 @@ function recordSyncEvent(kind, charId) {
 // de la page).
 function refreshSyncMeta() {
   showToast('Actualisation...');
-  fbLoadBdd().then(function (bdd) {
-    updateSyncMetaDisplay(bdd._meta);
+  fbLoadMeta().then(function (meta) {
+    updateSyncMetaDisplay(meta);
     showToast('Actualisé', 'success');
   }).catch(function (err) {
     showToast(err.message || 'Échec de l\'actualisation', true);

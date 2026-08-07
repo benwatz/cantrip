@@ -753,33 +753,40 @@
     return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  function fbLoadBdd() {
+  // Lecture/écriture ciblées sur cantrip/{charId} (pas le nœud "cantrip" entier) : chaque
+  // personnage a ses propres règles de sécurité RTDB ($charId, voir Firebase Console — accès
+  // restreint par characterAccess/{charId}/{uid}, suppression restreinte au créateur via
+  // characterOwners/{charId}), donc plus besoin de fusionner avec les autres personnages comme
+  // à l'époque d'un unique nœud "cantrip" partagé (transaction retirée : chaque écriture ne
+  // touche plus que son propre sous-arbre, aucun risque d'écraser un autre personnage).
+  function fbLoadCharacterEntry(charId) {
     return fbEnsureAuth().then(function () {
-      return fbDb.ref(FB_DATA_PATH).once('value').then(function (snapshot) {
-        return snapshot.val() || {};
+      return fbDb.ref(FB_DATA_PATH + '/' + charId).once('value').then(function (snapshot) {
+        return snapshot.val();
       });
     });
   }
 
-  // mutateFn(bdd) reçoit le contenu le plus récent du nœud et retourne l'objet complet à
-  // réécrire — exécuté via une transaction RTDB pour fusionner avec l'autre personnage plutôt
-  // que d'écraser tout le nœud avec un objet potentiellement obsolète construit avant la lecture
-  // (protège aussi contre une écriture concurrente depuis un autre appareil).
-  function fbSaveBdd(mutateFn) {
+  function fbSaveCharacterEntry(charId, entry) {
     return fbEnsureAuth().then(function () {
-      var updated = null;
-      return fbDb.ref(FB_DATA_PATH).transaction(function (current) {
-        updated = mutateFn(current || {});
-        return updated;
-      }).then(function (result) {
-        if (!result.committed) {
-          var deniedErr = new Error('Écriture refusée par les règles Firebase.');
-          deniedErr.code = 'PERMISSION_DENIED';
-          throw deniedErr;
-        }
-        return updated;
-      });
+      return fbDb.ref(FB_DATA_PATH + '/' + charId).set(entry);
     });
+  }
+
+  // Revendique la propriété d'un personnage tout juste sauvegardé pour la première fois sur
+  // Firebase (les règles RTDB autorisent la toute première écriture de cantrip/{charId} par
+  // n'importe quel utilisateur approuvé, précisément pour permettre ce cas — voir Firebase
+  // Console). Écrit characterOwners/{charId} et characterAccess/{charId}/{uid} : sans ça, plus
+  // personne (à part l'admin) ne pourrait relire ce personnage juste après l'avoir créé. Best
+  // effort : si ça échoue (quelqu'un d'autre a réclamé la propriété entre-temps, ou hors ligne),
+  // la sauvegarde du personnage elle-même reste acquise, seule l'attribution de propriété échoue.
+  function fbClaimOwnership(charId) {
+    var uid = fbAuth.currentUser && fbAuth.currentUser.uid;
+    if (!uid) return Promise.resolve();
+    return Promise.all([
+      fbDb.ref('characterOwners/' + charId).set(uid),
+      fbDb.ref('characterAccess/' + charId + '/' + uid).set(true)
+    ]).catch(function () { /* déjà revendié entre-temps, ou hors ligne : pas bloquant */ });
   }
 
   var state = loadState();
@@ -3664,8 +3671,7 @@
 
   function performFbLoad(charId) {
     ui.fbBusy = true; ui.fbError = null; render();
-    fbLoadBdd().then(function (bdd) {
-      var entry = bdd && bdd[charId];
+    fbLoadCharacterEntry(charId).then(function (entry) {
       if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage sur Firebase.');
       // Compat avec bdd.json écrit avant l'ajout du grimoire : entry était alors le profil
       // directement, sans clé "profile"/"grimoire".
@@ -3699,11 +3705,19 @@
     // version distante plus ancienne. On ne retombe sur le grimoire Firebase existant que si ce
     // personnage n'a encore jamais été édité localement (grimoire local absent).
     var fbSaveGrimoire = state.characters[charId].grimoire;
-    fbSaveBdd(function (bdd) {
-      var existingEntry = (bdd[charId] && typeof bdd[charId] === 'object') ? bdd[charId] : {};
-      var existingGrimoire = (existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : null;
-      bdd[charId] = { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire };
-      return bdd;
+    // Lecture best-effort : un personnage jamais encore sauvegardé sur Firebase n'a pas encore de
+    // characterAccess pour cet utilisateur, donc cette lecture peut légitimement échouer en
+    // PERMISSION_DENIED même si le personnage n'existe simplement pas encore (RTDB ne distingue
+    // pas les deux côté client, par design, pour ne pas révéler l'existence d'un nœud interdit).
+    // On traite cet échec comme "pas encore existant" et on laisse l'écriture ci-dessous être la
+    // vraie autorité : soit elle réussit (premier enregistrement, voir fbClaimOwnership), soit
+    // elle échoue à son tour avec la vraie erreur (personnage déjà possédé par quelqu'un d'autre).
+    fbLoadCharacterEntry(charId).catch(function () { return null; }).then(function (existingEntry) {
+      var wasExisting = existingEntry && typeof existingEntry === 'object';
+      var existingGrimoire = (wasExisting && existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : null;
+      return fbSaveCharacterEntry(charId, { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire }).then(function () {
+        if (!wasExisting) return fbClaimOwnership(charId);
+      });
     }).then(function () {
       state.characters[charId].savedProfile = cloneDeep(fbSaveProfile);
       saveState();
