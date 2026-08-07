@@ -396,25 +396,26 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
   de 360ms. Un badge "Personnage chargé" s'affiche sur la carte si `state.activeCharacterId`
   correspond au personnage affiché.
   Sous la carte, dans cet ordre : le bouton **Charger ce personnage** (`data-action=
-  "drive-load-character"`, toujours actif) puis, uniquement si le personnage affiché est déjà
-  actif (`isActive`), **Sauvegarder ce personnage** (`data-action="drive-save-character"`) — puis
+  "fb-load-character"`, toujours actif) puis, uniquement si le personnage affiché est déjà
+  actif (`isActive`), **Sauvegarder ce personnage** (`data-action="fb-save-character"`) — puis
   la rangée flèches/pastilles du carrousel. Les flèches gauche/droite
   (`data-action="character-carousel-step"`) sont volontairement à la même taille que les boutons
   −/+ du bloc PV du Tracker (80×76px, icône 36px, via `iconArrowLeft(size)`) plutôt que la taille
   généraliste 36×36 des autres boutons de navigation (`navBackButtonHtml()`), pour rester faciles
   à toucher (juillet 2026).
-  Les deux boutons passent par `bdd.json` sur Google Drive (mêmes fonctions `driveLoadBdd()`/
-  `driveSaveBdd()` que dans `cantrip-admin.html`, voir section Outil admin plus bas) plutôt que par
-  une simple copie locale de `character.savedProfile` — un tap ouvre d'abord une modale de
-  confirmation (`renderDriveConfirmModal()`, état `ui.driveConfirm = { action: 'load'|'save',
+  Les deux boutons passent par **Firebase Realtime Database** (nœud `cantrip`, mêmes fonctions
+  `fbLoadBdd()`/`fbSaveBdd()` que dans `cantrip-admin.html`, voir section Outil admin plus bas —
+  migré depuis Google Drive en août 2026, voir Historique en fin de section) plutôt que par une
+  simple copie locale de `character.savedProfile` — un tap ouvre d'abord une modale de
+  confirmation (`renderFbConfirmModal()`, état `ui.fbConfirm = { action: 'load'|'save',
   charId? }`, même gabarit visuel que `renderDisableLevelModal()`) rappelant que l'opération
-  écrase soit la sauvegarde locale sur cet appareil, soit celle sur Drive ; valider déclenche
-  `performDriveLoad()`/`performDriveSave()`, qui posent `ui.driveBusy` (désactive les boutons,
-  affiche "Synchronisation avec Drive…") puis, en cas de succès, mettent à jour
+  écrase soit la sauvegarde locale sur cet appareil, soit celle sur Firebase ; valider déclenche
+  `performFbLoad()`/`performFbSave()`, qui posent `ui.fbBusy` (désactive les boutons,
+  affiche "Synchronisation avec Firebase…") puis, en cas de succès, mettent à jour
   `character.savedProfile`, appliquent le thème (`applyTheme()`) et le profil actif, et affichent
-  un toast de confirmation (`showDriveToast()`/`ui.driveToast`) ; en cas d'échec, `ui.driveError`
+  un toast de confirmation (`showFbToast()`/`ui.fbToast`) ; en cas d'échec, `ui.fbError`
   s'affiche sous les boutons. `character.savedProfile` de chaque personnage reste donc modifiable
-  depuis l'app elle-même via cette synchro Drive (contrairement aux valeurs par défaut codées en
+  depuis l'app elle-même via cette synchro Firebase (contrairement aux valeurs par défaut codées en
   dur, voir section Outil admin plus bas).
   Le Grimoire affiché dépend de `state.activeCharacterId` (`activeSpellbook()`, voir section
   Grimoire plus haut) : charger Deneor bascule sur `DENEOR_SPELLBOOK`, indépendant du contenu de
@@ -506,6 +507,45 @@ versionné (`cantrip-vNN`, voir `sw.js` pour la valeur actuelle) — **incrémen
   push sur `preprod`, configuré depuis le dashboard Netlify (pas de `netlify.toml` dans le
   dépôt).
 
+## Synchronisation cloud (Firebase)
+
+Stockage cloud des personnages (profil + Grimoire), utilisé par les pages "Charger un personnage"
+(`index.html`) et le panneau Personnage de l'outil admin (voir sections précédentes) via un mode
+"Charger/Sauvegarder" explicite (pas de synchro live automatique). Remplace depuis août 2026 une
+première implémentation basée sur l'API Google Drive (voir Historique ci-dessous).
+
+- **Backend** : Firebase **Realtime Database**, projet `cantrip-e90fd`, région `europe-west1`. Un
+  seul nœud racine `cantrip` contenant `{ calix: { profile, grimoire }, deneor: { profile,
+  grimoire }, _meta: {...} }` — équivalent direct de l'ancien `bdd.json` sur Drive, même schéma
+  imbriqué.
+- **Auth** : Firebase Authentication, provider Google (`signInWithPopup`), session persistée par
+  le SDK (IndexedDB) — pas de ré-authentification à chaque lancement contrairement à l'ancien
+  jeton OAuth Drive qui expirait au bout d'une heure.
+- **Règles de sécurité RTDB** : `{ ".read": "auth != null", ".write": "auth != null" }` — tout
+  utilisateur connecté avec un compte Google peut lire/écrire (choix délibéré pour permettre à
+  plusieurs joueurs, ex. Deneor, de synchroniser depuis leur propre compte sans configuration
+  d'UID individuelle).
+- **Config client** (`FIREBASE_CONFIG`, dupliquée dans `index.html` et `cantrip-admin.html`,
+  même convention que le reste des constantes de sync) : n'est pas un secret, comme l'ancien
+  Client ID OAuth Drive — les règles RTDB ci-dessus sont la vraie barrière d'accès, pas la config.
+- **SDK** : `firebase-app-compat.js` / `firebase-auth-compat.js` / `firebase-database-compat.js`
+  via CDN (`gstatic.com/firebasejs`), API namespacée `firebase.*` plutôt que les imports ES
+  modules du SDK v9+ — choisi pour rester cohérent avec le style `<script>` classique du projet
+  (pas de build step, pas de `type="module"`).
+- Fonctions bas niveau : `fbEnsureAuth()` (popup Google si pas déjà connecté), `fbLoadBdd()`
+  (lecture simple du nœud), `fbSaveBdd(mutateFn)` (écriture via `transaction()` RTDB plutôt qu'un
+  read-then-write manuel, pour fusionner avec l'autre personnage et rester correct en cas
+  d'écriture concurrente depuis un autre appareil) — dupliquées dans les deux fichiers, comme le
+  reste de la synchro.
+
+**Historique : migration depuis Google Drive (2026-08-07).** L'implémentation initiale (2026-07-23)
+stockait `bdd.json` sur Google Drive via l'API REST + OAuth (`drive` scope, dossier "Cantrip"
+auto-créé). Remplacée par Firebase à la demande explicite de l'utilisateur. Toutes les fonctions et
+identifiers ont été renommés `drive*` → `fb*` en même temps (`driveLoadBdd`→`fbLoadBdd`,
+`ui.driveBusy`→`ui.fbBusy`, `data-action="drive-load-character"`→`"fb-load-character"`, etc.) pour
+que le code reste cohérent avec le backend réel plutôt que de garder une terminologie Drive
+obsolète. `sw.js` (`CACHE_NAME`) incrémenté en conséquence.
+
 ## Outil admin (`cantrip-admin.html`)
 
 Page statique **indépendante** de l'app (pas de logique partagée, pas de `state` commun),
@@ -522,35 +562,36 @@ CSS Grid, pas de zone centrée) :
 - **Droite** (`.topbar-right`), dans l'ordre : deux boutons de mode (`ui.mode`,
   `'personnage'` | `'grimoire'`) — **"Personnage"** puis **"Grimoire"** — qui affichent l'un ou
   l'autre panneau (`#personPanel` / `#phone`) sans jamais montrer les deux à la fois ; puis
-  **"Charger"** / **"Sauvegarder"** (`#btnDriveLoad`/`#btnDriveSave`, branchés dans `render()` donc
+  **"Charger"** / **"Sauvegarder"** (`#btnFbLoad`/`#btnFbSave`, branchés dans `render()` donc
   disponibles quel que soit le mode affiché). Le panneau "Personnage" reproduit tout ce qui est
   éditable dans "Paramétrer le Personnage" en jeu (PV, Combat, Attaques, Emplacements de sorts,
   Ressources de classe, Caractéristiques, Jets de sauvegarde, Compétences, Sorts préparés pour
   Deneor, Or) ; le panneau "Grimoire" reproduit le rendu du Grimoire de l'app (thème, filtres,
   onglets de niveau) pour éditer les sorts.
 
-**Synchronisation Google Drive (`bdd.json`)** — "Charger" (`driveLoadPersonnage()`) / "Sauvegarder"
-(`driveSavePersonnage()`) sont les **mêmes fonctions que dans `index.html`, dupliquées** (mêmes
-constantes `GOOGLE_CLIENT_ID`/`DRIVE_SCOPE`/`DRIVE_META_KEY`, même fichier `bdd.json` sur Drive).
-"Sauvegarder" écrit dans `bdd.json` le personnage actif (`ui.activeChar`) : à la fois son profil
-(`deriveFullProfile()`, un profil "frais" — PV au max, rien d'utilisé, tel qu'édité dans le
-panneau Personnage) **et** son Grimoire (tel qu'édité dans le panneau Grimoire) — ça écrase la
-progression sauvegardée par un joueur en jeu. "Charger" fait l'inverse : récupère dans les deux
-panneaux ce qu'un joueur a sauvegardé en jeu (page "Charger un personnage" de l'app). Une
-confirmation (`confirm()` natif, cohérent avec le reste de cet outil — désactivation de niveau,
-suppression de sort, réinitialisation...) est demandée avant "Charger" **et** "Sauvegarder" vu le
-caractère destructif des deux sens.
+**Synchronisation Firebase (Realtime Database, nœud `cantrip`)** — "Charger" (`fbLoadPersonnage()`)
+/ "Sauvegarder" (`fbSavePersonnage()`) sont les **mêmes fonctions que dans `index.html`, dupliquées**
+(même config `FIREBASE_CONFIG`, même base RTDB — voir section Firebase ci-dessous pour l'historique
+et la config complète). "Sauvegarder" écrit dans le nœud `cantrip/<charId>` le personnage actif
+(`ui.activeChar`) : à la fois son profil (`deriveFullProfile()`, un profil "frais" — PV au max,
+rien d'utilisé, tel qu'édité dans le panneau Personnage) **et** son Grimoire (tel qu'édité dans le
+panneau Grimoire) — ça écrase la progression sauvegardée par un joueur en jeu. "Charger" fait
+l'inverse : récupère dans les deux panneaux ce qu'un joueur a sauvegardé en jeu (page "Charger un
+personnage" de l'app). Une confirmation (`confirm()` natif, cohérent avec le reste de cet outil —
+désactivation de niveau, suppression de sort, réinitialisation...) est demandée avant "Charger"
+**et** "Sauvegarder" vu le caractère destructif des deux sens.
 
 Ancien flux retiré (juillet 2026) : l'outil publiait auparavant directement sur GitHub (bouton
 "Publier", token GitHub PAT stocké en `localStorage`, commit direct sur `master` via l'API GitHub
 Contents) pour réécrire les blocs `SPELLBOOK`/`DENEOR_SPELLBOOK` et
 `calixDefaultProfile()`/`deneorDefaultProfile()` codés en dur dans `index.html` (le contenu par
 défaut des nouvelles installations/réinitialisations). Ce flux a été retiré au profit de la seule
-synchronisation Drive ci-dessus, qui couvre le besoin réel (mettre à jour le personnage utilisé en
-jeu) sans passer par un commit Git. **Conséquence** : les valeurs par défaut codées en dur
+synchronisation cloud ci-dessus (Google Drive à l'origine, migrée vers Firebase en août 2026 — voir
+section Firebase), qui couvre le besoin réel (mettre à jour le personnage utilisé en jeu) sans
+passer par un commit Git. **Conséquence** : les valeurs par défaut codées en dur
 (`calixDefaultProfile`/`deneorDefaultProfile`/`SPELLBOOK`/`DENEOR_SPELLBOOK` dans `index.html`) ne
 sont plus modifiables depuis l'outil admin — seule une édition manuelle de `index.html` (ou la
-resynchro Drive au premier lancement) les fait évoluer désormais.
+resynchro cloud au premier lancement) les fait évoluer désormais.
 
 Le thème visuel (`data-theme`, voir section Thèmes plus haut) est posé sur `document.documentElement`
 (pas sur `<body>`) pour matcher les sélecteurs CSS `:root[data-theme="deneor"]` — bug corrigé

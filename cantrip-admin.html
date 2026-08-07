@@ -6,7 +6,9 @@
 <title>Cantrip - Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg-gradient-1: #f6ecd2;
@@ -228,8 +230,8 @@
   <div class="topbar-right">
     <button class="btn" id="btnModePersonnage">Personnage</button>
     <button class="btn" id="btnModeGrimoire">Grimoire</button>
-    <button class="btn" id="btnDriveLoad">Charger</button>
-    <button class="btn primary" id="btnDriveSave">Sauvegarder</button>
+    <button class="btn" id="btnFbLoad">Charger</button>
+    <button class="btn primary" id="btnFbSave">Sauvegarder</button>
   </div>
 </div>
 
@@ -799,8 +801,8 @@ function render() {
   btnPerso.onclick = function () { ui.mode = 'personnage'; render(); };
   btnGrim.onclick = function () { ui.mode = 'grimoire'; render(); };
 
-  document.getElementById('btnDriveLoad').onclick = driveLoadPersonnage;
-  document.getElementById('btnDriveSave').onclick = driveSavePersonnage;
+  document.getElementById('btnFbLoad').onclick = fbLoadPersonnage;
+  document.getElementById('btnFbSave').onclick = fbSavePersonnage;
 
   document.getElementById('phone').style.display = ui.mode === 'grimoire' ? 'flex' : 'none';
   document.getElementById('personPanel').style.display = ui.mode === 'personnage' ? 'flex' : 'none';
@@ -1419,7 +1421,7 @@ function renderSidePanel() {
       '<p>Ce panneau reproduit exactement le rendu du Grimoire dans Cantrip (theme, filtres, onglets de niveau). Cliquez sur un sort pour le modifier, ou sur le bouton + pour en ajouter un au niveau affiche.</p>' +
       '<p>Vos modifications sont sauvegardees automatiquement dans ce navigateur. Utilisez "Charger"/' +
       '"Sauvegarder" en haut a droite pour synchroniser ce grimoire (avec le profil du personnage) ' +
-      'via <code>bdd.json</code> sur Google Drive, la source que l\'app charge/sauvegarde en jeu.</p>';
+      'via <code>bdd.json</code> sur Firebase, la source que l\'app charge/sauvegarde en jeu.</p>';
     actions.innerHTML =
       '<button class="btn" id="btnAddLevel">Gerer les niveaux</button>' +
       '<button class="btn" id="btnResetMode">Reinitialiser le Grimoire</button>';
@@ -1432,7 +1434,7 @@ function renderSidePanel() {
       'Combat, Attaques, Emplacements de sorts, Ressources de classe, Caracteristiques, Jets de ' +
       'sauvegarde, Competences' + (ui.activeChar === 'deneor' ? ', Sorts prepares' : '') + ' et Or.</p>' +
       '<p>"Sauvegarder" (en haut a droite) ecrit ce profil <b>et le Grimoire de ce personnage</b> (tel ' +
-      'qu\'edite dans le panneau "Grimoire") dans <code>bdd.json</code> sur Google Drive, la source que ' +
+      'qu\'edite dans le panneau "Grimoire") dans <code>bdd.json</code> sur Firebase, la source que ' +
       'l\'app charge/sauvegarde en jeu (page "Charger un personnage") — ça <b>ecrase la progression ' +
       'sauvegardee par un joueur</b> pour ce personnage avec un profil frais (PV au max, rien ' +
       'd\'utilise). "Charger" fait l\'inverse : recupere dans ce formulaire et dans le panneau Grimoire ' +
@@ -1491,140 +1493,67 @@ function deriveFullProfile(charId) {
   };
 }
 
-// ---- synchronisation Google Drive (bdd.json) — memes fonctions que index.html, dupliquees ----
-// Client ID OAuth d'appli web : destine a etre embarque dans le JS client, pas un secret.
-var GOOGLE_CLIENT_ID = '653846859488-9fkauatcjch80v83ngdvk95t17gphrq1.apps.googleusercontent.com';
-var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
-var DRIVE_META_KEY = 'cantrip_drive_meta'; // { folderId, fileId } — partage avec index.html (meme origine)
+// ---- synchronisation Firebase (Realtime Database, noeud "cantrip") — memes fonctions que ----
+// index.html, dupliquees. Config Firebase : destinee a etre embarquee dans le JS client, pas un
+// secret (les regles de securite RTDB sont la vraie barriere d'acces).
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDfA4czzvREUV0fvuwxj25NViO4P_8R_TA",
+  authDomain: "cantrip-e90fd.firebaseapp.com",
+  databaseURL: "https://cantrip-e90fd-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "cantrip-e90fd",
+  storageBucket: "cantrip-e90fd.firebasestorage.app",
+  messagingSenderId: "843876738907",
+  appId: "1:843876738907:web:2518fbcd5d9fcc52cadc7e"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+var fbAuth = firebase.auth();
+var fbDb = firebase.database();
+var FB_DATA_PATH = 'cantrip'; // equivalent du "bdd.json" de l'ancienne synchro Drive
 
-var driveTokenClient = null;
-var driveAccessToken = null;
-var driveAccessTokenExpiry = 0;
-
-function driveMeta() {
-  try { return JSON.parse(localStorage.getItem(DRIVE_META_KEY)) || {}; } catch (e) { return {}; }
-}
-function saveDriveMeta(meta) {
-  try { localStorage.setItem(DRIVE_META_KEY, JSON.stringify(meta)); } catch (e) {}
-}
-
-function driveEnsureToken() {
-  if (driveAccessToken && Date.now() < driveAccessTokenExpiry) return Promise.resolve(driveAccessToken);
-  return new Promise(function (resolve, reject) {
-    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-      reject(new Error('Connexion Google indisponible (hors ligne ?)'));
-      return;
-    }
-    if (!driveTokenClient) {
-      driveTokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: DRIVE_SCOPE,
-        callback: function () {}
-      });
-    }
-    driveTokenClient.callback = function (resp) {
-      if (resp.error) { reject(new Error('Connexion Google refusee (' + resp.error + ')')); return; }
-      driveAccessToken = resp.access_token;
-      driveAccessTokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-      resolve(driveAccessToken);
-    };
-    driveTokenClient.requestAccessToken({ prompt: '' });
+function fbEnsureAuth() {
+  if (fbAuth.currentUser) return Promise.resolve(fbAuth.currentUser);
+  var provider = new firebase.auth.GoogleAuthProvider();
+  return fbAuth.signInWithPopup(provider).then(function (result) {
+    return result.user;
+  }).catch(function (err) {
+    throw new Error('Connexion Google refusee (' + (err.code || err.message) + ')');
   });
 }
 
-function driveHeaders(token) {
-  return { 'Authorization': 'Bearer ' + token };
-}
-
-function driveFindBddFile(token) {
-  var q = "name = 'bdd.json' and trashed = false";
-  return fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)&spaces=drive', { headers: driveHeaders(token) })
-    .then(function (res) { return res.json(); })
-    .then(function (json) { return (json.files && json.files[0]) ? json.files[0].id : null; });
-}
-
-function driveCreateFolder(token) {
-  return fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: Object.assign({ 'Content-Type': 'application/json' }, driveHeaders(token)),
-    body: JSON.stringify({ name: 'Cantrip', mimeType: 'application/vnd.google-apps.folder' })
-  }).then(function (res) { return res.json(); }).then(function (json) { return json.id; });
-}
-
-function driveCreateBddFile(token, folderId) {
-  return fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: Object.assign({ 'Content-Type': 'application/json' }, driveHeaders(token)),
-    body: JSON.stringify({ name: 'bdd.json', parents: [folderId], mimeType: 'application/json' })
-  }).then(function (res) { return res.json(); }).then(function (json) { return json.id; });
-}
-
-function driveEnsureFile(token) {
-  var meta = driveMeta();
-  if (meta.fileId) return Promise.resolve(meta.fileId);
-  return driveFindBddFile(token).then(function (existingId) {
-    if (existingId) { saveDriveMeta({ fileId: existingId }); return existingId; }
-    return driveCreateFolder(token).then(function (folderId) {
-      return driveCreateBddFile(token, folderId).then(function (fileId) {
-        saveDriveMeta({ folderId: folderId, fileId: fileId });
-        return fileId;
-      });
+function fbLoadBdd() {
+  return fbEnsureAuth().then(function () {
+    return fbDb.ref(FB_DATA_PATH).once('value').then(function (snapshot) {
+      return snapshot.val() || {};
     });
   });
 }
 
-function driveLoadBdd() {
-  return driveEnsureToken().then(function (token) {
-    return driveEnsureFile(token).then(function (fileId) {
-      return fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', { headers: driveHeaders(token) })
-        .then(function (res) {
-          if (res.status === 404) return '';
-          if (!res.ok) throw new Error('Lecture de bdd.json : ' + res.status);
-          return res.text();
-        })
-        .then(function (text) {
-          if (!text) return {};
-          try { return JSON.parse(text) || {}; } catch (e) { return {}; }
-        });
+function fbSaveBdd(mutateFn) {
+  return fbEnsureAuth().then(function () {
+    var updated = null;
+    return fbDb.ref(FB_DATA_PATH).transaction(function (current) {
+      updated = mutateFn(current || {});
+      return updated;
+    }).then(function (result) {
+      if (!result.committed) throw new Error('Ecriture refusee par les regles Firebase.');
+      return updated;
     });
   });
 }
 
-function driveSaveBdd(mutateFn) {
-  return driveEnsureToken().then(function (token) {
-    return driveEnsureFile(token).then(function (fileId) {
-      return fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', { headers: driveHeaders(token) })
-        .then(function (res) { return res.ok ? res.text() : ''; })
-        .then(function (text) {
-          var current = {};
-          if (text) { try { current = JSON.parse(text) || {}; } catch (e) {} }
-          var updated = mutateFn(current);
-          return fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
-            method: 'PATCH',
-            headers: Object.assign({ 'Content-Type': 'application/json' }, driveHeaders(token)),
-            body: JSON.stringify(updated, null, 2)
-          }).then(function (res) {
-            if (!res.ok) throw new Error('Ecriture de bdd.json : ' + res.status);
-            return updated;
-          });
-        });
-    });
-  });
-}
-
-function driveLoadPersonnage() {
+function fbLoadPersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Ceci remplace dans cet outil admin le profil et le Grimoire de "' + CHARACTER_NAMES[charId] + '" par ce qui est actuellement sauvegarde dans bdd.json sur Drive. Vos modifications non sauvegardees ici seront perdues. Continuer ?')) return;
-  showToast('Chargement depuis Drive...');
-  driveLoadBdd().then(function (bdd) {
+  if (!confirm('Ceci remplace dans cet outil admin le profil et le Grimoire de "' + CHARACTER_NAMES[charId] + '" par ce qui est actuellement sauvegarde dans bdd.json sur Firebase. Vos modifications non sauvegardees ici seront perdues. Continuer ?')) return;
+  showToast('Chargement depuis Firebase...');
+  fbLoadBdd().then(function (bdd) {
     var entry = bdd && bdd[charId];
-    if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Drive.');
+    if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Firebase.');
     // Compat avec bdd.json ecrit avant l'ajout du grimoire : entry etait alors le profil
     // directement, sans cle "profile"/"grimoire".
     var loadedProfile = (entry.profile && typeof entry.profile === 'object') ? entry.profile : entry;
     sanitizeAdminProfile(loadedProfile);
     state.profiles[charId] = loadedProfile;
-    // Pas de grimoire enregistre sur Drive pour ce personnage : on laisse le grimoire actuel de
+    // Pas de grimoire enregistre sur Firebase pour ce personnage : on laisse le grimoire actuel de
     // l'outil admin tel quel plutot que de l'effacer.
     if (entry.grimoire && Array.isArray(entry.grimoire.sections)) state[charId] = entry.grimoire.sections;
     saveState();
@@ -1632,16 +1561,16 @@ function driveLoadPersonnage() {
     showToast('Le personnage a été chargé avec succès.', 'success');
     recordSyncEvent('lastLoad', charId);
   }).catch(function (err) {
-    showToast(err.message || 'Echec du chargement Drive', true);
+    showToast(err.message || 'Echec du chargement Firebase', true);
   });
 }
 
-function driveSavePersonnage() {
+function fbSavePersonnage() {
   var charId = ui.activeChar;
-  if (!confirm('Ceci ecrase dans bdd.json sur Drive la sauvegarde "' + CHARACTER_NAMES[charId] + '" (profil ET grimoire) avec le contenu actuel de cet outil admin : profil frais (PV au max, emplacements/ressources non utilises) et grimoire tel qu\'edite ici. Toute progression en jeu deja sauvegardee par un joueur pour ce personnage sera perdue. Continuer ?')) return;
+  if (!confirm('Ceci ecrase dans bdd.json sur Firebase la sauvegarde "' + CHARACTER_NAMES[charId] + '" (profil ET grimoire) avec le contenu actuel de cet outil admin : profil frais (PV au max, emplacements/ressources non utilises) et grimoire tel qu\'edite ici. Toute progression en jeu deja sauvegardee par un joueur pour ce personnage sera perdue. Continuer ?')) return;
   var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) } };
-  showToast('Sauvegarde sur Drive...');
-  driveSaveBdd(function (bdd) {
+  showToast('Sauvegarde sur Firebase...');
+  fbSaveBdd(function (bdd) {
     bdd[charId] = payload;
     bdd._meta = bdd._meta || {};
     bdd._meta.lastSave = { at: new Date().toISOString(), charId: charId, source: 'admin' };
@@ -1650,13 +1579,13 @@ function driveSavePersonnage() {
     showToast('Le personnage a été sauvegardé avec succès.', 'success');
     updateSyncMetaDisplay(bdd._meta);
   }).catch(function (err) {
-    showToast(err.message || 'Echec de la sauvegarde Drive', true);
+    showToast(err.message || 'Echec de la sauvegarde Firebase', true);
   });
 }
 
 // ---- footer : date/heure du dernier chargement et de la derniere sauvegarde, tous appareils
 // confondus (bdd.json._meta, ecrit aussi bien par cet outil que par l'app index.html). Un cache
-// local (independant de DRIVE_META_KEY) permet d'afficher immediatement la derniere valeur connue
+// local permet d'afficher immediatement la derniere valeur connue
 // au chargement de la page, sans forcer une authentification Google au demarrage.
 var SYNC_META_CACHE_KEY = 'cantrip_admin_sync_meta_cache';
 var SYNC_SOURCE_LABELS = { app: "l'application", admin: "l'outil admin" };
@@ -1698,7 +1627,7 @@ function updateSyncMetaDisplay(meta) {
 // Ecriture best-effort d'un evenement de synchro (chargement) : n'affecte jamais le resultat de
 // l'action en cours si elle echoue.
 function recordSyncEvent(kind, charId) {
-  driveSaveBdd(function (bdd) {
+  fbSaveBdd(function (bdd) {
     bdd._meta = bdd._meta || {};
     bdd._meta[kind] = { at: new Date().toISOString(), charId: charId, source: 'admin' };
     return bdd;
@@ -1712,7 +1641,7 @@ function recordSyncEvent(kind, charId) {
 // de la page).
 function refreshSyncMeta() {
   showToast('Actualisation...');
-  driveLoadBdd().then(function (bdd) {
+  fbLoadBdd().then(function (bdd) {
     updateSyncMetaDisplay(bdd._meta);
     showToast('Actualisé', 'success');
   }).catch(function (err) {

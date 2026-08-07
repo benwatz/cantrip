@@ -13,7 +13,9 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg-gradient-1: #f6ecd2;
@@ -169,15 +171,15 @@
   }
   .concentration-toast-enter { animation: concentration-toast-in 320ms ease-out; }
   .concentration-toast-leave { animation: concentration-toast-out 320ms ease-in forwards; }
-  @keyframes drive-toast-in {
+  @keyframes fb-toast-in {
     from { transform: translateY(140%); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
   }
-  @keyframes drive-toast-out {
+  @keyframes fb-toast-out {
     from { transform: translateY(0); opacity: 1; }
     to { transform: translateY(140%); opacity: 0; }
   }
-  .drive-toast {
+  .fb-toast {
     position: fixed;
     left: 12px;
     right: 12px;
@@ -195,8 +197,8 @@
     text-overflow: ellipsis;
     box-shadow: 0 10px 28px rgba(0,0,0,0.35);
   }
-  .drive-toast-enter { animation: drive-toast-in 260ms ease-out; }
-  .drive-toast-leave { animation: drive-toast-out 260ms ease-in forwards; }
+  .fb-toast-enter { animation: fb-toast-in 260ms ease-out; }
+  .fb-toast-leave { animation: fb-toast-out 260ms ease-in forwards; }
   .rest-toast {
     position: fixed;
     left: 12px;
@@ -212,8 +214,8 @@
     text-align: center;
     box-shadow: 0 10px 28px rgba(0,0,0,0.35);
   }
-  .rest-toast-enter { animation: drive-toast-in 260ms ease-out; }
-  .rest-toast-leave { animation: drive-toast-out 260ms ease-in forwards; }
+  .rest-toast-enter { animation: fb-toast-in 260ms ease-out; }
+  .rest-toast-leave { animation: fb-toast-out 260ms ease-in forwards; }
   @keyframes codex-preview-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
   @keyframes codex-preview-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
   @keyframes codex-preview-card-in {
@@ -562,7 +564,7 @@
     var p = profile || defaultProfile();
     p.characterName = name;
     // grimoire : null par défaut (utilise SPELLBOOK/DENEOR_SPELLBOOK codé en dur), rempli
-    // uniquement par un "Charger ce personnage" qui a trouvé un grimoire dans bdd.json sur Drive.
+    // uniquement par un "Charger ce personnage" qui a trouvé un grimoire sur Firebase.
     return { id: id, name: name, subtitle: subtitle, level: level, portrait: portrait, theme: theme, savedProfile: p, grimoire: null };
   }
 
@@ -643,94 +645,33 @@
     if (themeColorMeta) themeColorMeta.setAttribute('content', THEME_COLOR_META[theme] || THEME_COLOR_META.calix);
   }
 
-  // ---- synchronisation Google Drive (bdd.json) ----
-  // Client ID OAuth d'appli web : destiné à être embarqué dans le JS client, pas un secret
-  // (contrairement à un client secret, qui n'existe pas pour ce type de flux SPA).
-  var GOOGLE_CLIENT_ID = '653846859488-9fkauatcjch80v83ngdvk95t17gphrq1.apps.googleusercontent.com';
-  var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
-  var DRIVE_META_KEY = 'cantrip_drive_meta'; // { folderId, fileId } — partagé avec cantrip-admin.html (même origine)
+  // ---- synchronisation Firebase (Realtime Database, nœud "cantrip") ----
+  // Config Firebase : destinée à être embarquée dans le JS client, pas un secret (les règles de
+  // sécurité RTDB — "auth != null", voir Firebase Console — sont la vraie barrière d'accès).
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDfA4czzvREUV0fvuwxj25NViO4P_8R_TA",
+    authDomain: "cantrip-e90fd.firebaseapp.com",
+    databaseURL: "https://cantrip-e90fd-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "cantrip-e90fd",
+    storageBucket: "cantrip-e90fd.firebasestorage.app",
+    messagingSenderId: "843876738907",
+    appId: "1:843876738907:web:2518fbcd5d9fcc52cadc7e"
+  };
+  firebase.initializeApp(FIREBASE_CONFIG);
+  var fbAuth = firebase.auth();
+  var fbDb = firebase.database();
+  var FB_DATA_PATH = 'cantrip'; // équivalent du "bdd.json" de l'ancienne synchro Drive
 
-  var driveTokenClient = null;
-  var driveAccessToken = null;
-  var driveAccessTokenExpiry = 0;
-
-  function driveMeta() {
-    try { return JSON.parse(localStorage.getItem(DRIVE_META_KEY)) || {}; } catch (e) { return {}; }
-  }
-  function saveDriveMeta(meta) {
-    try { localStorage.setItem(DRIVE_META_KEY, JSON.stringify(meta)); } catch (e) { /* localStorage indisponible */ }
-  }
-
-  function driveEnsureToken() {
-    if (driveAccessToken && Date.now() < driveAccessTokenExpiry) return Promise.resolve(driveAccessToken);
-    return new Promise(function (resolve, reject) {
-      if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-        reject(new Error('Connexion Google indisponible (hors ligne ?)'));
-        return;
-      }
-      if (!driveTokenClient) {
-        driveTokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: DRIVE_SCOPE,
-          callback: function () {} // remplacé à chaque appel ci-dessous
-        });
-      }
-      driveTokenClient.callback = function (resp) {
-        if (resp.error) { reject(new Error('Connexion Google refusée (' + resp.error + ')')); return; }
-        driveAccessToken = resp.access_token;
-        driveAccessTokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-        resolve(driveAccessToken);
-      };
-      driveTokenClient.requestAccessToken({ prompt: '' });
-    });
-  }
-
-  function driveHeaders(token) {
-    return { 'Authorization': 'Bearer ' + token };
-  }
-
-  function driveFindBddFile(token) {
-    var q = "name = 'bdd.json' and trashed = false";
-    return fetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id)&spaces=drive', { headers: driveHeaders(token) })
-      .then(function (res) { return res.json(); })
-      .then(function (json) { return (json.files && json.files[0]) ? json.files[0].id : null; });
-  }
-
-  function driveCreateFolder(token) {
-    return fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, driveHeaders(token)),
-      body: JSON.stringify({ name: 'Cantrip', mimeType: 'application/vnd.google-apps.folder' })
-    }).then(function (res) { return res.json(); }).then(function (json) { return json.id; });
-  }
-
-  function driveCreateBddFile(token, folderId) {
-    return fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, driveHeaders(token)),
-      body: JSON.stringify({ name: 'bdd.json', parents: [folderId], mimeType: 'application/json' })
-    }).then(function (res) { return res.json(); }).then(function (json) { return json.id; });
-  }
-
-  // Scope 'drive' (accès complet, pas 'drive.file') : nécessaire pour que le bdd.json créé sous
-  // un compte Google (ex. celui du MJ) reste accessible aux autres joueurs une fois partagé
-  // depuis l'interface Drive avec leur propre compte — avec 'drive.file', chaque compte ne
-  // verrait que les fichiers qu'il a lui-même créés, même partagés (bug corrigé juillet 2026 :
-  // "aucune sauvegarde... sur Drive" pour tout compte différent du créateur). Au premier appel
-  // sous un compte n'ayant pas encore de bdd.json, l'app crée son propre dossier "Cantrip" à la
-  // racine de "Mon Drive" plutôt que de chercher un dossier existant choisi par l'utilisateur
-  // (choix retenu pour éviter Google Picker et sa clé API séparée).
-  function driveEnsureFile(token) {
-    var meta = driveMeta();
-    if (meta.fileId) return Promise.resolve(meta.fileId);
-    return driveFindBddFile(token).then(function (existingId) {
-      if (existingId) { saveDriveMeta({ fileId: existingId }); return existingId; }
-      return driveCreateFolder(token).then(function (folderId) {
-        return driveCreateBddFile(token, folderId).then(function (fileId) {
-          saveDriveMeta({ folderId: folderId, fileId: fileId });
-          return fileId;
-        });
-      });
+  // Ouvre le popup de connexion Google si besoin ; ne redemande rien si déjà connecté (Firebase
+  // Auth persiste la session dans IndexedDB entre les rechargements, contrairement au jeton OAuth
+  // de l'ancienne synchro Drive, qui expirait au bout d'une heure).
+  function fbEnsureAuth() {
+    if (fbAuth.currentUser) return Promise.resolve(fbAuth.currentUser);
+    var provider = new firebase.auth.GoogleAuthProvider();
+    return fbAuth.signInWithPopup(provider).then(function (result) {
+      return result.user;
+    }).catch(function (err) {
+      throw new Error('Connexion Google refusée (' + (err.code || err.message) + ')');
     });
   }
 
@@ -757,44 +698,27 @@
     return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  function driveLoadBdd() {
-    return driveEnsureToken().then(function (token) {
-      return driveEnsureFile(token).then(function (fileId) {
-        return fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', { headers: driveHeaders(token) })
-          .then(function (res) {
-            if (res.status === 404) return '';
-            if (!res.ok) throw new Error('Lecture de bdd.json : ' + res.status);
-            return res.text();
-          })
-          .then(function (text) {
-            if (!text) return {};
-            try { return JSON.parse(text) || {}; } catch (e) { return {}; }
-          });
+  function fbLoadBdd() {
+    return fbEnsureAuth().then(function () {
+      return fbDb.ref(FB_DATA_PATH).once('value').then(function (snapshot) {
+        return snapshot.val() || {};
       });
     });
   }
 
-  // mutateFn(bdd) reçoit le contenu le plus récent de bdd.json et retourne l'objet complet à
-  // réécrire — permet de fusionner avec l'autre personnage plutôt que d'écraser tout le fichier
-  // avec un objet potentiellement obsolète construit avant la lecture.
-  function driveSaveBdd(mutateFn) {
-    return driveEnsureToken().then(function (token) {
-      return driveEnsureFile(token).then(function (fileId) {
-        return fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', { headers: driveHeaders(token) })
-          .then(function (res) { return res.ok ? res.text() : ''; })
-          .then(function (text) {
-            var current = {};
-            if (text) { try { current = JSON.parse(text) || {}; } catch (e) {} }
-            var updated = mutateFn(current);
-            return fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media', {
-              method: 'PATCH',
-              headers: Object.assign({ 'Content-Type': 'application/json' }, driveHeaders(token)),
-              body: JSON.stringify(updated, null, 2)
-            }).then(function (res) {
-              if (!res.ok) throw new Error('Écriture de bdd.json : ' + res.status);
-              return updated;
-            });
-          });
+  // mutateFn(bdd) reçoit le contenu le plus récent du nœud et retourne l'objet complet à
+  // réécrire — exécuté via une transaction RTDB pour fusionner avec l'autre personnage plutôt
+  // que d'écraser tout le nœud avec un objet potentiellement obsolète construit avant la lecture
+  // (protège aussi contre une écriture concurrente depuis un autre appareil).
+  function fbSaveBdd(mutateFn) {
+    return fbEnsureAuth().then(function () {
+      var updated = null;
+      return fbDb.ref(FB_DATA_PATH).transaction(function (current) {
+        updated = mutateFn(current || {});
+        return updated;
+      }).then(function (result) {
+        if (!result.committed) throw new Error('Écriture refusée par les règles Firebase.');
+        return updated;
       });
     });
   }
@@ -827,13 +751,13 @@
     concentrationToast: null, // null | { leaving: bool } — toast "dégâts subis en concentration"
     concentrationToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render() pour ne jouer l'anim d'entrée qu'au premier rendu
     concentrationToastCooldownUntil: 0, // Date.now() ms ; tant que Date.now() < cette valeur, ne redéclenche pas le toast
-    driveBusy: false, // true pendant un chargement/sauvegarde Google Drive en cours
-    driveError: null, // dernier message d'erreur Drive à afficher sur "Charger un personnage"
-    driveToast: null, // null | { message: string, leaving: bool } — confirmation de succès Charger/Sauvegarder
-    driveToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
+    fbBusy: false, // true pendant un chargement/sauvegarde Firebase en cours
+    fbError: null, // dernier message d'erreur Firebase à afficher sur "Charger un personnage"
+    fbToast: null, // null | { message: string, leaving: bool } — confirmation de succès Charger/Sauvegarder
+    fbToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     restToast: null, // null | { leaving: bool } — confirmation "Vous êtes reposé(e)." après la modale Repos
     restToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
-    driveConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Drive est ouverte
+    fbConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Firebase est ouverte
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
@@ -1060,7 +984,7 @@
     ]
   };
 
-  // Grimoire d'un personnage : celui chargé depuis Drive (state.characters[id].grimoire) s'il
+  // Grimoire d'un personnage : celui chargé depuis Firebase (state.characters[id].grimoire) s'il
   // existe, sinon le contenu par défaut codé en dur (SPELLBOOK/DENEOR_SPELLBOOK).
   function characterGrimoire(charId) {
     var loaded = state.characters[charId] && state.characters[charId].grimoire;
@@ -1218,14 +1142,14 @@
     if (ui.goldModalOpen) {
       app.insertAdjacentHTML('beforeend', renderGoldModal());
     }
-    if (ui.driveConfirm) {
-      app.insertAdjacentHTML('beforeend', renderDriveConfirmModal());
+    if (ui.fbConfirm) {
+      app.insertAdjacentHTML('beforeend', renderFbConfirmModal());
     }
     if (ui.concentrationToast) {
       app.insertAdjacentHTML('beforeend', renderConcentrationToast());
     }
-    if (ui.driveToast) {
-      app.insertAdjacentHTML('beforeend', renderDriveToast());
+    if (ui.fbToast) {
+      app.insertAdjacentHTML('beforeend', renderFbToast());
     }
     if (ui.restToast) {
       app.insertAdjacentHTML('beforeend', renderRestToast());
@@ -1997,26 +1921,26 @@
         '<div data-action="character-carousel-step" data-delta="1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);transform:scaleX(-1);' + (idx === CHARACTER_ORDER.length - 1 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
       '</div>';
 
-    var driveDisabledStyle = ui.driveBusy ? 'opacity:0.5;pointer-events:none;' : 'cursor:pointer;';
-    var driveButtonBaseStyle = 'flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;';
-    var driveButtonsHtml =
+    var fbDisabledStyle = ui.fbBusy ? 'opacity:0.5;pointer-events:none;' : 'cursor:pointer;';
+    var fbButtonBaseStyle = 'flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;';
+    var fbButtonsHtml =
       '<div style="display:flex;flex-direction:column;gap:8px;flex:none">' +
-        '<div data-action="drive-load-character" data-id="' + charId + '" style="' + driveButtonBaseStyle + driveDisabledStyle + '" class="font-cinzel">Charger ce personnage</div>' +
+        '<div data-action="fb-load-character" data-id="' + charId + '" style="' + fbButtonBaseStyle + fbDisabledStyle + '" class="font-cinzel">Charger ce personnage</div>' +
         (isActive ?
-          '<div data-action="drive-save-character" style="' + driveButtonBaseStyle + driveDisabledStyle + '" class="font-cinzel">Sauvegarder ce personnage</div>'
+          '<div data-action="fb-save-character" style="' + fbButtonBaseStyle + fbDisabledStyle + '" class="font-cinzel">Sauvegarder ce personnage</div>'
           : '') +
       '</div>';
 
-    var driveStatusHtml = ui.driveBusy
-      ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--text-muted)">Synchronisation avec Drive…</div>'
-      : (ui.driveError ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--accent-red-text)">' + escapeHtml(ui.driveError) + '</div>' : '');
+    var fbStatusHtml = ui.fbBusy
+      ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--text-muted)">Synchronisation avec Firebase…</div>'
+      : (ui.fbError ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--accent-red-text)">' + escapeHtml(ui.fbError) + '</div>' : '');
 
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         renderSettingsHeader('Charger un personnage') +
         cardHtml +
-        driveButtonsHtml +
-        driveStatusHtml +
+        fbButtonsHtml +
+        fbStatusHtml +
         navArrowsHtml +
       '</div>'
     );
@@ -2081,7 +2005,7 @@
   }
 
   // Portrait agrandi au tap sur une ligne du Codex — même pattern enter/leave animé que les
-  // toasts concentration/Drive (ui.codexPreview.leaving + render() immédiat, puis un setTimeout
+  // toasts concentration/Firebase (ui.codexPreview.leaving + render() immédiat, puis un setTimeout
   // dont la durée matche l'animation CSS de sortie avant de vider l'état pour de bon).
   function renderCodexPreviewModal() {
     var entering = ui.codexPreviewEnterPending;
@@ -2150,22 +2074,22 @@
     '</div>';
   }
 
-  function renderDriveConfirmModal() {
-    var isLoad = ui.driveConfirm.action === 'load';
-    var charId = isLoad ? ui.driveConfirm.charId : state.activeCharacterId;
+  function renderFbConfirmModal() {
+    var isLoad = ui.fbConfirm.action === 'load';
+    var charId = isLoad ? ui.fbConfirm.charId : state.activeCharacterId;
     var charName = state.characters[charId].name;
-    var title = isLoad ? 'Charger depuis Drive' : 'Sauvegarder sur Drive';
+    var title = isLoad ? 'Charger depuis Firebase' : 'Sauvegarder sur Firebase';
     var body = isLoad
-      ? ('Ceci remplace le personnage chargé sur cet appareil par la sauvegarde de ' + escapeHtml(charName) + ' sur Google Drive. Toute progression non sauvegardée ici sera perdue. Continuer ?')
-      : ('Ceci écrase la sauvegarde de ' + escapeHtml(charName) + ' sur Google Drive avec la progression actuelle sur cet appareil. Continuer ?');
+      ? ('Ceci remplace le personnage chargé sur cet appareil par la sauvegarde de ' + escapeHtml(charName) + ' sur Firebase. Toute progression non sauvegardée ici sera perdue. Continuer ?')
+      : ('Ceci écrase la sauvegarde de ' + escapeHtml(charName) + ' sur Firebase avec la progression actuelle sur cet appareil. Continuer ?');
     var confirmLabel = isLoad ? 'Charger' : 'Sauvegarder';
-    return '<div id="driveConfirmOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+    return '<div id="fbConfirmOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
       '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
         '<div style="font-size:17px;font-weight:700;color:var(--text-gold)" class="font-cinzel">' + escapeHtml(title) + '</div>' +
         '<div style="font-size:13px;color:var(--text-desc);line-height:1.4">' + body + '</div>' +
         '<div style="display:flex;gap:10px;margin-top:4px">' +
-          '<div data-action="cancel-drive-confirm" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
-          '<div data-action="confirm-drive-action" style="flex:1;height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">' + confirmLabel + '</div>' +
+          '<div data-action="cancel-fb-confirm" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-fb-action" style="flex:1;height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">' + confirmLabel + '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -2209,11 +2133,11 @@
     '</div>';
   }
 
-  function renderDriveToast() {
-    var entering = ui.driveToastEnterPending;
-    ui.driveToastEnterPending = false;
-    var anim = ui.driveToast.leaving ? 'drive-toast-leave' : (entering ? 'drive-toast-enter' : '');
-    return '<div class="drive-toast ' + anim + '">' + escapeHtml(ui.driveToast.message) + '</div>';
+  function renderFbToast() {
+    var entering = ui.fbToastEnterPending;
+    ui.fbToastEnterPending = false;
+    var anim = ui.fbToast.leaving ? 'fb-toast-leave' : (entering ? 'fb-toast-enter' : '');
+    return '<div class="fb-toast ' + anim + '">' + escapeHtml(ui.fbToast.message) + '</div>';
   }
 
   function renderRestToast() {
@@ -2975,29 +2899,29 @@
         characterCarouselStep(carouselDelta);
         break;
       }
-      case 'drive-load-character': {
-        if (ui.driveBusy) break;
-        var driveLoadId = e.currentTarget.getAttribute('data-id');
-        ui.driveConfirm = { action: 'load', charId: driveLoadId };
+      case 'fb-load-character': {
+        if (ui.fbBusy) break;
+        var fbLoadId = e.currentTarget.getAttribute('data-id');
+        ui.fbConfirm = { action: 'load', charId: fbLoadId };
         render();
         break;
       }
-      case 'drive-save-character': {
-        if (ui.driveBusy) break;
-        ui.driveConfirm = { action: 'save' };
+      case 'fb-save-character': {
+        if (ui.fbBusy) break;
+        ui.fbConfirm = { action: 'save' };
         render();
         break;
       }
-      case 'cancel-drive-confirm':
-        ui.driveConfirm = null;
+      case 'cancel-fb-confirm':
+        ui.fbConfirm = null;
         render();
         break;
-      case 'confirm-drive-action': {
-        var driveConfirm = ui.driveConfirm;
-        ui.driveConfirm = null;
-        if (!driveConfirm) break;
-        if (driveConfirm.action === 'load') performDriveLoad(driveConfirm.charId);
-        else performDriveSave();
+      case 'confirm-fb-action': {
+        var fbConfirm = ui.fbConfirm;
+        ui.fbConfirm = null;
+        if (!fbConfirm) break;
+        if (fbConfirm.action === 'load') performFbLoad(fbConfirm.charId);
+        else performFbSave();
         break;
       }
 
@@ -3131,12 +3055,12 @@
     }, SPELL_DETAIL_LEAVE_MS);
   }
 
-  // ---- actions Charger/Sauvegarder (Google Drive), déclenchées après confirmation ----
-  function performDriveLoad(charId) {
-    ui.driveBusy = true; ui.driveError = null; render();
-    driveLoadBdd().then(function (bdd) {
+  // ---- actions Charger/Sauvegarder (Firebase), déclenchées après confirmation ----
+  function performFbLoad(charId) {
+    ui.fbBusy = true; ui.fbError = null; render();
+    fbLoadBdd().then(function (bdd) {
       var entry = bdd && bdd[charId];
-      if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage dans bdd.json sur Drive.');
+      if (!entry || typeof entry !== 'object') throw new Error('Aucune sauvegarde pour ce personnage sur Firebase.');
       // Compat avec bdd.json écrit avant l'ajout du grimoire : entry était alors le profil
       // directement, sans clé "profile"/"grimoire".
       var loadedProfile = (entry.profile && typeof entry.profile === 'object') ? entry.profile : entry;
@@ -3148,64 +3072,64 @@
       state.activeCharacterId = charId;
       applyTheme();
       saveState();
-      ui.driveBusy = false;
+      ui.fbBusy = false;
       ui.view = 'tracker';
-      showDriveToast('Le personnage a été chargé avec succès.');
+      showFbToast('Le personnage a été chargé avec succès.');
       render();
     }).catch(function (err) {
-      ui.driveBusy = false;
-      ui.driveError = err.message || 'Échec du chargement depuis Drive';
+      ui.fbBusy = false;
+      ui.fbError = err.message || 'Échec du chargement depuis Firebase';
       render();
     });
   }
 
-  function performDriveSave() {
-    ui.driveBusy = true; ui.driveError = null; render();
+  function performFbSave() {
+    ui.fbBusy = true; ui.fbError = null; render();
     var charId = state.activeCharacterId;
-    var driveSaveProfile = cloneDeep(profile());
+    var fbSaveProfile = cloneDeep(profile());
     // Le grimoire n'est pas éditable depuis l'app : on réécrit uniquement le profil, en
     // conservant tel quel le grimoire déjà présent dans bdd.json (posé par l'admin) plutôt
     // que de l'écraser avec rien.
-    driveSaveBdd(function (bdd) {
+    fbSaveBdd(function (bdd) {
       var existingEntry = (bdd[charId] && typeof bdd[charId] === 'object') ? bdd[charId] : {};
       var existingGrimoire = (existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : (state.characters[charId].grimoire || null);
-      bdd[charId] = { profile: driveSaveProfile, grimoire: existingGrimoire };
+      bdd[charId] = { profile: fbSaveProfile, grimoire: existingGrimoire };
       return bdd;
     }).then(function () {
-      state.characters[charId].savedProfile = cloneDeep(driveSaveProfile);
+      state.characters[charId].savedProfile = cloneDeep(fbSaveProfile);
       saveState();
-      ui.driveBusy = false;
-      showDriveToast('Le personnage a été sauvegardé avec succès.');
+      ui.fbBusy = false;
+      showFbToast('Le personnage a été sauvegardé avec succès.');
       render();
     }).catch(function (err) {
-      ui.driveBusy = false;
-      ui.driveError = err.message || 'Échec de la sauvegarde sur Drive';
+      ui.fbBusy = false;
+      ui.fbError = err.message || 'Échec de la sauvegarde sur Firebase';
       render();
     });
   }
 
-  // ---- toast de confirmation Charger/Sauvegarder (Google Drive) ----
-  var DRIVE_TOAST_VISIBLE_MS = 2200;
-  var DRIVE_TOAST_LEAVE_MS = 260;
-  var driveToastHideTimer = null;
-  var driveToastRemoveTimer = null;
+  // ---- toast de confirmation Charger/Sauvegarder (Firebase) ----
+  var FB_TOAST_VISIBLE_MS = 2200;
+  var FB_TOAST_LEAVE_MS = 260;
+  var fbToastHideTimer = null;
+  var fbToastRemoveTimer = null;
 
-  function showDriveToast(message) {
-    ui.driveToast = { message: message, leaving: false };
-    ui.driveToastEnterPending = true;
-    clearTimeout(driveToastHideTimer);
-    clearTimeout(driveToastRemoveTimer);
-    driveToastHideTimer = setTimeout(startLeavingDriveToast, DRIVE_TOAST_VISIBLE_MS);
+  function showFbToast(message) {
+    ui.fbToast = { message: message, leaving: false };
+    ui.fbToastEnterPending = true;
+    clearTimeout(fbToastHideTimer);
+    clearTimeout(fbToastRemoveTimer);
+    fbToastHideTimer = setTimeout(startLeavingFbToast, FB_TOAST_VISIBLE_MS);
   }
 
-  function startLeavingDriveToast() {
-    if (!ui.driveToast || ui.driveToast.leaving) return;
-    ui.driveToast.leaving = true;
-    clearTimeout(driveToastRemoveTimer);
-    driveToastRemoveTimer = setTimeout(function () {
-      ui.driveToast = null;
+  function startLeavingFbToast() {
+    if (!ui.fbToast || ui.fbToast.leaving) return;
+    ui.fbToast.leaving = true;
+    clearTimeout(fbToastRemoveTimer);
+    fbToastRemoveTimer = setTimeout(function () {
+      ui.fbToast = null;
       render();
-    }, DRIVE_TOAST_LEAVE_MS);
+    }, FB_TOAST_LEAVE_MS);
     render();
   }
 
