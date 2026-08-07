@@ -77,15 +77,6 @@
   }
   .font-cinzel { font-family:'Cinzel', serif; }
 
-  .topbar{
-    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
-    padding:16px 24px;background:var(--admin-panel);border-bottom:1px solid rgba(var(--border-tint),0.3);
-  }
-  .topbar-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  .topbar-right{display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
-  .topbar-left .btn, .topbar-right .btn{white-space:nowrap;}
-  .topbar h1{font-size:19px;margin:0;letter-spacing:0.02em;color:var(--text-gold);white-space:nowrap;}
-  .topbar .sub{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;}
   .btn{
     border:1px solid var(--border-strong);background:transparent;color:var(--text-gold);
     padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;
@@ -95,20 +86,85 @@
   .btn.small{padding:5px 10px;font-size:11px;}
   .btn.danger{border-color:var(--accent-red-text);color:var(--accent-red-text);}
   .btn.danger:hover{background:var(--accent-red-text);color:#fff;}
-  .layout{display:flex;gap:26px;padding:26px;max-width:1200px;margin:0 auto;align-items:flex-start;flex-wrap:wrap;justify-content:center;}
 
-  .phone{
-    width:480px;max-width:100%;flex:none;
+  /* ---- écran de connexion (bloque tout accès au contenu tant que non autorisé) ---- */
+  .auth-gate{
+    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;
     background:
       linear-gradient(160deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%),
       repeating-linear-gradient(45deg, var(--bg-texture) 0px, var(--bg-texture) 2px, transparent 2px, transparent 7px);
-    border-radius:22px;
-    border:6px solid #2a2018;
-    box-shadow:0 12px 40px rgba(0,0,0,0.35);
-    padding:20px 16px 16px;
-    min-height:640px;
-    display:flex;flex-direction:column;gap:12px;
-    position:relative;
+  }
+  .gate-card{
+    width:380px;max-width:100%;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);
+    border-radius:16px;padding:28px 24px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25);
+  }
+  .gate-title{font-size:20px;color:var(--text-gold);margin-bottom:12px;}
+  .gate-card p{font-size:13px;color:var(--text-desc);line-height:1.5;margin:0 0 18px;}
+  .gate-card .btn{width:100%;margin-bottom:8px;}
+  .gate-error{margin-top:12px;font-size:12px;color:var(--accent-red-text);}
+  .gate-hint{margin-top:12px;font-size:12px;color:var(--text-muted);}
+  .gate-user{font-size:11px;color:var(--text-dim);word-break:break-all;margin-bottom:14px;}
+
+  /* ---- chrome principal (identité visuelle proche de l'app : en-tête léger, sélecteur de
+     personnage, contenu en une colonne, barre d'action fixe, nav basse à onglets) ---- */
+  .app-root{display:flex;flex-direction:column;min-height:100vh;}
+  .adm-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:12px 20px;background:var(--admin-panel);border-bottom:1px solid rgba(var(--border-tint),0.3);
+    position:sticky;top:0;z-index:20;
+  }
+  .adm-header-title{font-size:17px;color:var(--text-gold);letter-spacing:0.02em;}
+  .adm-header-user{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-dim);}
+  .adm-header-user .email{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .adm-header-user .btn{padding:6px 10px;font-size:11px;}
+
+  .adm-charswitch{
+    display:flex;gap:8px;padding:12px 20px 0;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;
+  }
+  .charchip{
+    flex:1;text-align:center;padding:9px 8px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;
+    border:1px solid rgba(var(--border-tint),0.3);color:var(--text-label);background:var(--bg-card);
+  }
+  .charchip.active{background:var(--border-strong);color:var(--ink-bright);border-color:var(--border-strong);}
+
+  .adm-content{
+    flex:1;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;padding:14px 16px 24px;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .adm-toolbar{display:flex;gap:8px;flex-wrap:wrap;}
+  .adm-toolbar .btn{flex:1;white-space:nowrap;}
+
+  .panel-card{
+    background:var(--bg-card-alt);border:1px solid rgba(var(--border-tint),0.2);border-radius:16px;
+    padding:16px 14px;display:flex;flex-direction:column;gap:12px;position:relative;
+  }
+
+  .adm-actionbar{
+    display:flex;gap:10px;padding:10px 16px;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;
+    position:sticky;bottom:56px;background:var(--admin-bg);z-index:15;
+  }
+  .adm-actionbar .btn{flex:1;}
+
+  .adm-bottomnav{
+    display:flex;position:sticky;bottom:0;z-index:20;
+    background:var(--admin-panel);border-top:1px solid rgba(var(--border-tint),0.3);
+  }
+  .adm-navbtn{
+    flex:1;border:none;background:transparent;color:var(--text-dim);padding:11px 4px;font-size:12px;
+    font-weight:700;cursor:pointer;font-family:inherit;border-top:2px solid transparent;
+  }
+  .adm-navbtn.active{color:var(--text-gold);border-top-color:var(--border-strong);}
+
+  .adm-syncfooter{font-size:11px;color:var(--text-dim);display:flex;gap:6px 16px;flex-wrap:wrap;}
+  .adm-syncfooter .refresh-link{cursor:pointer;text-decoration:underline;color:var(--text-muted);}
+
+  details.adm-help{font-size:12.5px;color:var(--text-desc);}
+  details.adm-help summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.05em;}
+  details.adm-help p{line-height:1.5;margin:8px 0 0;}
+  details.adm-help code{background:rgba(var(--border-tint),0.12);padding:1px 4px;border-radius:4px;}
+
+  .phone{
+    display:flex;flex-direction:column;gap:12px;position:relative;
   }
   .grim-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
   .grim-title{font-size:21px;font-weight:700;letter-spacing:0.3px;color:var(--text-main);}
@@ -160,17 +216,6 @@
   .toggle-knob{width:18px;height:18px;border-radius:9px;background:var(--ink-bright);position:absolute;top:3px;transition:left 150ms;}
 
   .person-panel{
-    width:480px;max-width:100%;flex:none;
-    background:
-      linear-gradient(160deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%),
-      repeating-linear-gradient(45deg, var(--bg-texture) 0px, var(--bg-texture) 2px, transparent 2px, transparent 7px);
-    border-radius:22px;
-    border:6px solid #2a2018;
-    box-shadow:0 12px 40px rgba(0,0,0,0.35);
-    padding:20px 16px 24px;
-    min-height:640px;
-    max-height:82vh;
-    overflow-y:auto;
     display:flex;flex-direction:column;gap:16px;
   }
   .person-panel .psec{display:flex;flex-direction:column;gap:6px;flex:none;}
@@ -181,16 +226,12 @@
   .person-panel .pfield{display:flex;flex-direction:column;gap:4px;min-width:0;}
   .person-panel .pfield label{font-size:11px;color:var(--text-muted);text-align:center;}
   .person-panel input[type=text].pnum, .person-panel input[type=text].psigned{width:100%;height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;text-align:center;box-sizing:border-box;font-family:inherit;}
-  .person-panel .padd{height:44px;border-radius:10px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;}
+  .panel-card .padd{height:44px;border-radius:10px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;}
   .person-panel .premove{flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;}
   .person-panel .preorder{flex:none;display:flex;flex-direction:column;gap:2px;}
   .person-panel .preorder div{width:22px;height:17px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;}
   .person-title{font-size:21px;font-weight:700;letter-spacing:0.3px;color:var(--text-main);}
 
-  .side-panel{width:320px;flex:none;background:var(--admin-panel);border:1px solid rgba(var(--border-tint),0.3);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:16px;}
-  .side-panel h2{font-size:15px;margin:0;color:var(--text-gold);font-family:'Cinzel',serif;}
-  .side-panel p{font-size:12.5px;color:var(--text-desc);line-height:1.5;margin:0;}
-  .side-panel .actions{display:flex;flex-direction:column;gap:8px;}
   .empty-hint{padding:24px 4px;text-align:center;font-size:12px;color:var(--text-dim);}
 
   .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(10,8,6,0.65);align-items:center;justify-content:center;padding:20px;z-index:60;}
@@ -216,17 +257,13 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--border-strong);color:var(--ink-bright);padding:10px 20px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity 0.25s;z-index:100;}
   .toast.show{opacity:1;}
 
-  .sync-footer{max-width:1200px;margin:0 auto;padding:2px 26px 22px;display:flex;gap:8px 22px;flex-wrap:wrap;justify-content:center;font-size:12px;color:var(--text-dim);}
-  .sync-footer .refresh-link{cursor:pointer;text-decoration:underline;color:var(--text-muted);}
-
   @media (max-width: 640px) {
-    .topbar{padding:12px 14px;gap:10px;}
-    .topbar-left, .topbar-right{width:100%;justify-content:center;}
-    .topbar h1{width:100%;text-align:center;font-size:17px;}
+    .adm-header{padding:10px 14px;}
+    .adm-header-title{font-size:15px;}
+    .adm-charswitch{padding:10px 14px 0;}
+    .adm-content{padding:12px 12px 20px;}
+    .adm-actionbar{padding:8px 12px;bottom:52px;}
     .btn{padding:11px 14px;min-height:40px;}
-    .layout{padding:14px;gap:16px;}
-    .phone, .person-panel{border-width:3px;padding:16px 12px 14px;min-height:0;}
-    .side-panel{width:100%;max-width:480px;padding:16px;}
     .modal{padding:16px;}
     .field-row{flex-wrap:wrap;}
     .field-row .field{flex:1 1 140px;}
@@ -234,47 +271,46 @@
 </style>
 </head>
 <body>
-<div class="topbar">
-  <div class="topbar-left">
-    <h1 class="font-cinzel">Cantrip - Admin</h1>
-    <button class="btn" id="btnCharCalix">Calix Noctavel</button>
-    <button class="btn" id="btnCharDeneor">Deneor Sentariel</button>
-  </div>
-  <div class="topbar-right">
-    <button class="btn" id="btnModePersonnage">Personnage</button>
-    <button class="btn" id="btnModeGrimoire">Grimoire</button>
-    <button class="btn" id="btnModeAcces">Accès</button>
+<div class="auth-gate" id="authGate"></div>
+
+<div class="app-root" id="appRoot" style="display:none;">
+  <header class="adm-header">
+    <div class="adm-header-title font-cinzel">Cantrip · Admin</div>
+    <div class="adm-header-user" id="admHeaderUser"></div>
+  </header>
+
+  <div class="adm-charswitch" id="charSwitch"></div>
+
+  <main class="adm-content">
+    <div class="adm-toolbar" id="panelToolbar"></div>
+
+    <div class="panel-card phone" id="phone" style="display:none;">
+      <div class="grim-header">
+        <div class="grim-title font-cinzel">Grimoire</div>
+        <div class="filter-chips" id="filterChips"></div>
+      </div>
+      <div class="hscroll" id="levelTabs"></div>
+      <div class="spell-scroll" id="spellScroll"></div>
+      <div class="padd" id="fabAdd">+ Ajouter un sort</div>
+    </div>
+
+    <div class="panel-card person-panel" id="personPanel" style="display:none;"></div>
+    <div class="panel-card person-panel" id="accessPanel" style="display:none;"></div>
+
+    <div class="adm-syncfooter" id="syncFooter"></div>
+  </main>
+
+  <div class="adm-actionbar" id="actionBar">
     <button class="btn" id="btnFbLoad">Charger</button>
     <button class="btn primary" id="btnFbSave">Sauvegarder</button>
   </div>
+
+  <nav class="adm-bottomnav" id="bottomNav">
+    <button class="adm-navbtn" id="btnModePersonnage" data-mode="personnage">Personnage</button>
+    <button class="adm-navbtn" id="btnModeGrimoire" data-mode="grimoire">Grimoire</button>
+    <button class="adm-navbtn" id="btnModeAcces" data-mode="acces">Accès</button>
+  </nav>
 </div>
-
-<div class="layout">
-  <div class="phone" id="phone">
-    <div class="grim-header">
-      <div class="grim-title font-cinzel">Grimoire</div>
-      <div class="filter-chips" id="filterChips"></div>
-    </div>
-    <div class="hscroll" id="levelTabs"></div>
-    <div class="spell-scroll" id="spellScroll"></div>
-    <button class="fab" id="fabAdd" title="Ajouter un sort">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="display:block;">
-        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-      </svg>
-    </button>
-  </div>
-
-  <div class="person-panel" id="personPanel" style="display:none;"></div>
-  <div class="person-panel" id="accessPanel" style="display:none;"></div>
-
-  <div class="side-panel" id="sidePanel">
-    <h2 id="sidePanelTitle">Comment ça marche</h2>
-    <div id="sidePanelBody"></div>
-    <div class="actions" id="sidePanelActions"></div>
-  </div>
-</div>
-
-<div class="sync-footer" id="syncFooter"></div>
 
 <!-- Modal: add/edit spell -->
 <div class="modal-backdrop" id="spellModalBackdrop">
@@ -805,32 +841,36 @@ function levelTabLabel(level) { return level === 'classe' ? 'Classe' : String(le
 function render() {
   document.documentElement.setAttribute('data-theme', ui.activeChar === 'deneor' ? 'deneor' : 'calix');
 
-  // character buttons
-  var btnCalix = document.getElementById('btnCharCalix');
-  var btnDeneor = document.getElementById('btnCharDeneor');
-  btnCalix.className = 'btn' + (ui.activeChar === 'calix' ? ' primary' : '');
-  btnDeneor.className = 'btn' + (ui.activeChar === 'deneor' ? ' primary' : '');
-  btnCalix.onclick = function () { ui.activeChar = 'calix'; ui.activeLevel = null; render(); };
-  btnDeneor.onclick = function () { ui.activeChar = 'deneor'; ui.activeLevel = null; render(); };
+  // sélecteur de personnage
+  var sw = document.getElementById('charSwitch');
+  sw.innerHTML = ['calix', 'deneor'].map(function (c) {
+    return '<div class="charchip' + (ui.activeChar === c ? ' active' : '') + '" data-char="' + c + '">' + escapeHtml(CHARACTER_NAMES[c]) + '</div>';
+  }).join('');
+  sw.querySelectorAll('.charchip').forEach(function (el) {
+    el.addEventListener('click', function () { ui.activeChar = el.getAttribute('data-char'); ui.activeLevel = null; render(); });
+  });
 
-  // mode buttons (Personnage / Grimoire / Accès)
+  // onglets de navigation (Personnage / Grimoire / Accès — Accès réservé à l'admin)
   var btnPerso = document.getElementById('btnModePersonnage');
   var btnGrim = document.getElementById('btnModeGrimoire');
   var btnAcces = document.getElementById('btnModeAcces');
-  btnPerso.className = 'btn' + (ui.mode === 'personnage' ? ' primary' : '');
-  btnGrim.className = 'btn' + (ui.mode === 'grimoire' ? ' primary' : '');
-  btnAcces.className = 'btn' + (ui.mode === 'acces' ? ' primary' : '');
+  btnAcces.style.display = authState.isAdmin ? '' : 'none';
+  if (!authState.isAdmin && ui.mode === 'acces') ui.mode = 'grimoire';
+  btnPerso.className = 'adm-navbtn' + (ui.mode === 'personnage' ? ' active' : '');
+  btnGrim.className = 'adm-navbtn' + (ui.mode === 'grimoire' ? ' active' : '');
+  btnAcces.className = 'adm-navbtn' + (ui.mode === 'acces' ? ' active' : '');
   btnPerso.onclick = function () { ui.mode = 'personnage'; render(); };
   btnGrim.onclick = function () { ui.mode = 'grimoire'; render(); };
   btnAcces.onclick = function () { ui.mode = 'acces'; render(); };
 
   document.getElementById('btnFbLoad').onclick = fbLoadPersonnage;
   document.getElementById('btnFbSave').onclick = fbSavePersonnage;
+  document.getElementById('actionBar').style.display = ui.mode === 'acces' ? 'none' : 'flex';
 
   document.getElementById('phone').style.display = ui.mode === 'grimoire' ? 'flex' : 'none';
   document.getElementById('personPanel').style.display = ui.mode === 'personnage' ? 'flex' : 'none';
   document.getElementById('accessPanel').style.display = ui.mode === 'acces' ? 'flex' : 'none';
-  renderSidePanel();
+  renderPanelToolbar();
 
   if (ui.mode === 'personnage') { renderPersonnage(); return; }
   if (ui.mode === 'acces') { renderAccess(); return; }
@@ -1436,40 +1476,30 @@ function resetPersonnage() {
 }
 
 // ---- side panel (contenu adapte au mode actif) ----
-function renderSidePanel() {
-  var panel = document.getElementById('sidePanel');
-  if (ui.mode === 'acces') { panel.style.display = 'none'; return; }
-  panel.style.display = 'flex';
-  var title = document.getElementById('sidePanelTitle');
-  var body = document.getElementById('sidePanelBody');
-  var actions = document.getElementById('sidePanelActions');
+// Barre d'outils contextuelle au-dessus du contenu (remplace l'ancien panneau latéral "Comment ça
+// marche" + ses boutons) : actions rapides propres au mode affiché, plus une aide repliable pour
+// ne pas encombrer l'écran par défaut.
+function renderPanelToolbar() {
+  var toolbar = document.getElementById('panelToolbar');
+  if (ui.mode === 'acces') { toolbar.innerHTML = ''; return; }
+
   if (ui.mode === 'grimoire') {
-    title.textContent = 'Comment ça marche (Grimoire)';
-    body.innerHTML =
-      '<p>Ce panneau reproduit exactement le rendu du Grimoire dans Cantrip (theme, filtres, onglets de niveau). Cliquez sur un sort pour le modifier, ou sur le bouton + pour en ajouter un au niveau affiche.</p>' +
-      '<p>Vos modifications sont sauvegardees automatiquement dans ce navigateur. Utilisez "Charger"/' +
-      '"Sauvegarder" en haut a droite pour synchroniser ce grimoire (avec le profil du personnage) ' +
-      'via <code>bdd.json</code> sur Firebase, la source que l\'app charge/sauvegarde en jeu.</p>';
-    actions.innerHTML =
-      '<button class="btn" id="btnAddLevel">Gerer les niveaux</button>' +
-      '<button class="btn" id="btnResetMode">Reinitialiser le Grimoire</button>';
+    toolbar.innerHTML =
+      '<button class="btn small" id="btnAddLevel">Gérer les niveaux</button>' +
+      '<button class="btn small" id="btnResetMode">Réinitialiser le Grimoire</button>' +
+      '<details class="adm-help" style="flex-basis:100%;">' +
+        '<summary>Comment ça marche</summary>' +
+        '<p>Ce panneau reproduit le rendu du Grimoire dans Cantrip. Cliquez sur un sort pour le modifier, ou sur le bouton + pour en ajouter un au niveau affiché. Les modifications sont sauvegardées automatiquement dans ce navigateur ; utilisez "Charger"/"Sauvegarder" ci-dessous pour synchroniser via Firebase, la source que l\'app utilise en jeu.</p>' +
+      '</details>';
     document.getElementById('btnAddLevel').addEventListener('click', openLevelModal);
     document.getElementById('btnResetMode').addEventListener('click', resetGrimoire);
   } else {
-    title.textContent = 'Comment ça marche (Personnage)';
-    body.innerHTML =
-      '<p>Ce formulaire regroupe tout ce qui est editable dans "Parametrer le Personnage" en jeu : PV, ' +
-      'Combat, Attaques, Emplacements de sorts, Ressources de classe, Caracteristiques, Jets de ' +
-      'sauvegarde, Competences' + (ui.activeChar === 'deneor' ? ', Sorts prepares' : '') + ' et Or.</p>' +
-      '<p>"Sauvegarder" (en haut a droite) ecrit ce profil <b>et le Grimoire de ce personnage</b> (tel ' +
-      'qu\'edite dans le panneau "Grimoire") dans <code>bdd.json</code> sur Firebase, la source que ' +
-      'l\'app charge/sauvegarde en jeu (page "Charger un personnage") — ça <b>ecrase la progression ' +
-      'sauvegardee par un joueur</b> pour ce personnage avec un profil frais (PV au max, rien ' +
-      'd\'utilise). "Charger" fait l\'inverse : recupere dans ce formulaire et dans le panneau Grimoire ' +
-      'ce qu\'un joueur a sauvegarde en jeu.</p>' +
-      '<p>Vos modifications sont sauvegardees automatiquement dans ce navigateur.</p>';
-    actions.innerHTML =
-      '<button class="btn" id="btnResetMode">Reinitialiser les Personnages</button>';
+    toolbar.innerHTML =
+      '<button class="btn small" id="btnResetMode">Réinitialiser les Personnages</button>' +
+      '<details class="adm-help" style="flex-basis:100%;">' +
+        '<summary>Comment ça marche</summary>' +
+        '<p>Ce formulaire regroupe tout ce qui est éditable dans "Paramétrer le Personnage" en jeu. "Sauvegarder" écrit ce profil <b>et le Grimoire de ce personnage</b> sur Firebase — ça écrase la progression sauvegardée par un joueur avec un profil frais (PV au max, rien d\'utilisé). "Charger" fait l\'inverse. Les modifications sont sauvegardées automatiquement dans ce navigateur.</p>' +
+      '</details>';
     document.getElementById('btnResetMode').addEventListener('click', resetPersonnage);
   }
 }
@@ -1537,6 +1567,107 @@ firebase.initializeApp(FIREBASE_CONFIG);
 var fbAuth = firebase.auth();
 var fbDb = firebase.database();
 var FB_DATA_PATH = 'cantrip'; // equivalent du "bdd.json" de l'ancienne synchro Drive
+
+// ---- écran de connexion obligatoire : aucun contenu de l'outil admin n'est monté dans le DOM
+// (appRoot reste display:none) tant que l'utilisateur n'est pas identifié comme administrateur
+// (lecture réussie de cantrip/_meta, réservée à l'admin par les règles RTDB) ou comme utilisateur
+// approuvé (approvedUsers/{uid}, lecture réservée à soi-même — voir CLAUDE.md pour la règle RTDB
+// à ajouter si elle ne l'est pas déjà). Un utilisateur approuvé mais non-admin n'a pas accès à
+// l'onglet "Accès" (données admin-only).
+var authState = { user: null, isAdmin: false, authorized: false, checking: false, requested: false, error: null };
+
+function renderAuthGate() {
+  var gate = document.getElementById('authGate');
+  var root = document.getElementById('appRoot');
+  if (authState.authorized) { gate.style.display = 'none'; root.style.display = 'flex'; return; }
+  root.style.display = 'none';
+  gate.style.display = 'flex';
+
+  var html;
+  if (!authState.user) {
+    html = '<div class="gate-card"><div class="gate-title font-cinzel">Cantrip · Admin</div>' +
+      '<p>Cet outil est réservé à l\'administrateur et aux utilisateurs qu\'il a approuvés. Connectez-vous avec votre compte Google pour continuer.</p>' +
+      '<button class="btn primary" id="btnGateSignIn">Se connecter avec Google</button>' +
+      (authState.error ? '<div class="gate-error">' + escapeHtml(authState.error) + '</div>' : '') +
+      '</div>';
+  } else if (authState.checking) {
+    html = '<div class="gate-card"><div class="gate-title font-cinzel">Cantrip · Admin</div><p>Vérification de vos accès…</p></div>';
+  } else {
+    html = '<div class="gate-card"><div class="gate-title font-cinzel">Accès non autorisé</div>' +
+      '<div class="gate-user">' + escapeHtml(authState.user.email || authState.user.uid) + '</div>' +
+      '<p>Ce compte n\'a pas encore été approuvé pour l\'outil admin.</p>' +
+      '<button class="btn primary" id="btnGateRequest"' + (authState.requested ? ' disabled' : '') + '>' +
+        (authState.requested ? 'Demande envoyée' : 'Demander l\'accès') +
+      '</button>' +
+      '<button class="btn" id="btnGateSignOut">Se déconnecter</button>' +
+      (authState.requested ? '<div class="gate-hint">L\'administrateur doit approuver ce compte avant que l\'accès ne s\'ouvre.</div>' : '') +
+      (authState.error ? '<div class="gate-error">' + escapeHtml(authState.error) + '</div>' : '') +
+      '</div>';
+  }
+  gate.innerHTML = html;
+  var signIn = document.getElementById('btnGateSignIn');
+  if (signIn) signIn.addEventListener('click', gateSignIn);
+  var req = document.getElementById('btnGateRequest');
+  if (req) req.addEventListener('click', gateRequestAccess);
+  var signOut = document.getElementById('btnGateSignOut');
+  if (signOut) signOut.addEventListener('click', function () { fbAuth.signOut(); });
+}
+
+function gateSignIn() {
+  authState.error = null; renderAuthGate();
+  var provider = new firebase.auth.GoogleAuthProvider();
+  fbAuth.signInWithPopup(provider).catch(function (err) {
+    authState.error = 'Connexion refusée (' + (err.code || err.message) + ')';
+    renderAuthGate();
+  });
+}
+
+function gateRequestAccess() {
+  var user = authState.user;
+  if (!user) return;
+  fbDb.ref('accessRequests/' + user.uid).set({
+    email: user.email || '', name: user.displayName || '', requestedAt: Date.now()
+  }).then(function () {
+    authState.requested = true; renderAuthGate();
+  }).catch(function (err) {
+    authState.error = err.message || 'Échec de la demande d\'accès';
+    renderAuthGate();
+  });
+}
+
+function checkAuthorization(user) {
+  authState.checking = true; renderAuthGate();
+  fbDb.ref(FB_DATA_PATH + '/_meta').once('value').then(function () {
+    authState.isAdmin = true; authState.authorized = true; authState.checking = false;
+    onAuthorized();
+  }).catch(function () {
+    fbDb.ref('approvedUsers/' + user.uid).once('value').then(function (snap) {
+      authState.isAdmin = false; authState.authorized = snap.val() === true; authState.checking = false;
+      if (authState.authorized) onAuthorized(); else renderAuthGate();
+    }).catch(function () {
+      authState.isAdmin = false; authState.authorized = false; authState.checking = false;
+      renderAuthGate();
+    });
+  });
+}
+
+// Premier rendu du contenu, uniquement une fois l'autorisation confirmée.
+function onAuthorized() {
+  var email = document.getElementById('admHeaderUser');
+  email.innerHTML = '<span class="email">' + escapeHtml(authState.user.email || '') + '</span>' +
+    '<button class="btn small" id="btnHeaderSignOut">Déconnexion</button>';
+  document.getElementById('btnHeaderSignOut').addEventListener('click', function () { fbAuth.signOut(); });
+  render();
+  renderAuthGate();
+  renderSyncFooter(loadSyncMetaCache());
+}
+
+fbAuth.onAuthStateChanged(function (user) {
+  authState.user = user;
+  authState.requested = false;
+  if (user) { authState.error = null; checkAuthorization(user); }
+  else { authState.isAdmin = false; authState.authorized = false; authState.checking = false; renderAuthGate(); }
+});
 
 function fbEnsureAuth() {
   if (fbAuth.currentUser) return Promise.resolve(fbAuth.currentUser);
@@ -1928,8 +2059,7 @@ function refreshSyncMeta() {
 }
 
 state = loadState();
-render();
-renderSyncFooter(loadSyncMetaCache());
+renderAuthGate();
 </script>
 </body>
 </html>

@@ -395,6 +395,14 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
      portrait agrandi (`ui.codexPreview`, `data-action="open-codex-preview"`), même principe
      d'animation enter/leave que la popup de détail de sort du Grimoire.
 
+   Un lien discret "Outil admin" (`data-action="open-admin"`, soulignage discret, sous la date de
+   dernière mise à jour en bas du menu Paramètres — voir août 2026) ouvre `cantrip-admin.html` dans
+   un nouvel onglet (`window.open(..., '_blank')`, chemin relatif : fonctionne aussi bien en local
+   qu'une fois déployé). Un simple lien plutôt qu'une navigation interne car l'outil admin est une
+   page HTML totalement indépendante (pas de `state` partagé, voir section Outil admin plus bas) —
+   et lui-même protégé par son propre écran de connexion Google, donc ce lien reste sans risque à
+   afficher à n'importe quel joueur ayant l'app ouverte.
+
 ## Personnages (Calix / Deneor + personnages créés dynamiquement)
 
 `state.characters` est un objet `{ [id]: {...} }`, chaque entrée `{ id, name, subtitle, level,
@@ -763,30 +771,80 @@ https://benwatz.github.io/cantrip/cantrip-admin.html. Renommée depuis `cantrip-
 (stats). Sauvegarde locale automatique (`localStorage`, clé `cantrip_admin_grimoire_v1`,
 indépendante de `jdr_character_tracker_state`).
 
-Barre du haut en 2 zones (`.topbar`, flex simple `justify-content:space-between` — pas de
-CSS Grid, pas de zone centrée) :
-- **Gauche** (`.topbar-left`) : titre + deux boutons de personnage
-  (`#btnCharCalix`/`#btnCharDeneor`, `ui.activeChar`) à la place d'un ancien menu déroulant.
-- **Droite** (`.topbar-right`), dans l'ordre : trois boutons de mode (`ui.mode`,
-  `'personnage'` | `'grimoire'` | `'acces'`) — **"Personnage"**, **"Grimoire"** puis **"Accès"**
-  (ajouté 2026-08-07, voir section Synchronisation cloud plus bas pour le détail du panneau) — qui
-  affichent chacun leur panneau (`#personPanel` / `#phone` / `#accessPanel`) sans jamais en montrer
-  deux à la fois ; puis **"Charger"** / **"Sauvegarder"** (`#btnFbLoad`/`#btnFbSave`, branchés dans
-  `render()` donc disponibles quel que soit le mode affiché). Le panneau "Personnage" reproduit
-  tout ce qui est éditable dans "Paramétrer le Personnage" en jeu (PV, Combat, Attaques,
-  Emplacements de sorts, Ressources de classe, Caractéristiques, Jets de sauvegarde, Compétences,
-  Sorts préparés pour Deneor, Or) ; le panneau "Grimoire" reproduit le rendu du Grimoire de l'app
-  (thème, filtres, onglets de niveau) pour éditer les sorts.
+**Écran de connexion obligatoire (2026-08-07)** — refonte complète du chrome de l'outil, en plus
+d'un verrou d'accès qui n'existait pas jusque-là : la page ne montait auparavant aucune barrière
+avant d'afficher `#phone`/`#personPanel` (Google Sign-in n'était déclenché qu'à la première action
+Firebase, style "connexion paresseuse") ; **rien ne s'affiche plus tant que l'utilisateur n'est pas
+identifié**. `#appRoot` (tout le chrome + contenu) reste `display:none` et un `#authGate` plein
+écran (`.auth-gate`/`.gate-card`, même esthétique parchemin que le reste de l'outil) est affiché à
+la place, avec un simple bouton "Se connecter avec Google" (geste utilisateur requis — `file://`/
+Firebase popup est bloqué par le navigateur si déclenché automatiquement, d'où l'absence
+historique d'auth au chargement, préservée par ce bouton).
+Logique dans `authState`/`checkAuthorization()`/`renderAuthGate()` : après connexion,
+`checkAuthorization()` tente une lecture de `cantrip/_meta` (admin-only par les règles RTDB) — si
+elle réussit, `authState.isAdmin = true` et l'outil s'ouvre en entier (y compris l'onglet "Accès") ;
+sinon elle retombe sur une lecture de `approvedUsers/{son propre uid}` — si elle vaut `true`,
+l'outil s'ouvre en mode restreint (Personnage/Grimoire seulement, pas d'onglet "Accès", pas de
+lecture de `cantrip`/`approvedUsers`/`characterOwners`/`characterAccess` en entier — ces
+utilisateurs n'y ont de toute façon pas droit). Si aucune des deux lectures n'aboutit, un écran
+"Accès non autorisé" propose "Demander l'accès" (réutilise `accessRequests/{uid}`, déjà
+autorisé en écriture à tout utilisateur connecté par les règles existantes) puis attend
+l'approbation admin dans le panneau "Accès" (voir section Synchronisation cloud).
+**Prérequis règles RTDB (Firebase Console) pour que le cas "utilisateur approuvé non-admin"
+fonctionne** : la règle `approvedUsers` actuelle est `.read`/`.write` admin-only, donc un
+utilisateur non-admin ne peut pas lire son propre statut. Ajouter un accès en lecture à soi-même
+sans toucher au reste :
+```json
+"approvedUsers": {
+  ".read": "auth.uid === '<UID admin>'",
+  ".write": "auth.uid === '<UID admin>'",
+  "$uid": {
+    ".read": "auth != null && auth.uid === $uid"
+  }
+}
+```
+Tant que cette règle n'est pas ajoutée, un utilisateur approuvé mais non-admin reste bloqué sur
+l'écran "Accès non autorisé" côté outil admin (son accès aux personnages via `characterAccess`
+dans l'app `index.html` n'est lui pas affecté, ces règles sont indépendantes).
 
-Responsive mobile (ajouté 2026-08-07) : `@media (max-width: 640px)` fait passer `.topbar-left`/
-`.topbar-right` en pleine largeur (empilés plutôt que côte à côte), réduit les paddings de
-`.layout`/`.phone`/`.person-panel`/`.modal`, agrandit légèrement les boutons (`min-height:40px`,
-cible tactile) et fait passer `.field-row` en wrap. `.layout` (flex + `flex-wrap:wrap`) et les
-largeurs `480px`/`320px` avec `max-width:100%` sur `.phone`/`.person-panel`/`.side-panel`
-suffisaient déjà à éviter tout débordement horizontal avant cet ajout — le correctif porte donc
-sur l'usage de l'espace et la taille des cibles tactiles, pas sur un bug de mise en page cassée.
-`.phone`/`.person-panel` reproduisent de toute façon le rendu mobile-first de l'app elle-même
-(même `.pgrid3` à 3 colonnes que le Tracker), donc déjà lisibles à 375px de large sans changement.
+**Chrome principal, style "app mobile"** (remplace l'ancienne barre du haut à 2 zones +
+mise en page côte à côte téléphone/panneau latéral, jugée mal organisée) — repris du langage visuel
+de Cantrip lui-même plutôt que d'un habillage "outil d'admin" générique :
+- `.adm-header` (bandeau sticky en haut, pleine largeur) : titre + email du compte connecté +
+  bouton "Déconnexion" (`fbAuth.signOut()`).
+- `.adm-charswitch` : deux chips pleine-largeur Calix/Deneor (remplace `#btnCharCalix`/
+  `#btnCharDeneor`), même rôle qu'avant (`ui.activeChar`).
+- `.adm-toolbar` (`renderPanelToolbar()`, remplace l'ancien `#sidePanel` "Comment ça marche" à côté
+  du mockup téléphone) : actions rapides contextuelles au mode affiché ("Gérer les niveaux" /
+  "Réinitialiser le Grimoire" en mode Grimoire, "Réinitialiser les Personnages" en mode Personnage,
+  rien en mode Accès) plus un `<details class="adm-help">` replié par défaut pour l'explication
+  longue (autrefois toujours visible dans le panneau latéral, jugée trop encombrante en continu).
+- Contenu (`.adm-content`, une seule colonne, `max-width:640px` centrée même en large desktop —
+  volontaire, pour rester lisible comme l'app plutôt que d'étaler le formulaire sur toute la
+  largeur d'un écran PC) : `#phone`/`#personPanel`/`#accessPanel` partagent maintenant la classe
+  `.panel-card` (fond `--bg-card-alt`, bordure, `border-radius:16px` — même gabarit visuel, plus de
+  bezel "téléphone" factice avec bordure épaisse/coins très arrondis ni de hauteur figée avec
+  scroll interne : le contenu s'étend naturellement dans le scroll de la page). Le bouton flottant
+  "+" du Grimoire (`.fab`, `position:absolute` ancré au mockup) est retiré au profit d'un bouton
+  "+ Ajouter un sort" en flux normal (`.padd`, même style que "+ Ajouter une arme"/"+ Ajouter une
+  ressource" du panneau Personnage) — l'ancien FAB chevauchait visuellement la nouvelle barre
+  d'action fixe en bas.
+- `.adm-actionbar` (sticky, juste au-dessus de la nav basse) : "Charger"/"Sauvegarder"
+  (`#btnFbLoad`/`#btnFbSave`), masquée en mode Accès (ces deux actions n'ont pas de sens ici).
+- `.adm-bottomnav` (sticky en bas, pleine largeur) : onglets Personnage / Grimoire / Accès
+  (`#btnModePersonnage`/`#btnModeGrimoire`/`#btnModeAcces`) — l'onglet Accès est masqué
+  (`display:none`) si `authState.isAdmin` est faux, cohérent avec la restriction de lecture RTDB
+  décrite plus haut.
+
+Le panneau "Accès" (voir section Synchronisation cloud) utilise désormais aussi `.panel-card`/
+`.pcard`/`.prow` (plus le mockup téléphone qu'il empruntait par erreur visuelle à l'origine — un
+tableau de gestion d'utilisateurs n'a pas vocation à ressembler à un téléphone).
+
+Responsive : `.adm-content`/`.adm-charswitch`/`.adm-actionbar` restent centrés à `max-width:640px`
+quelle que soit la largeur de fenêtre (identique mobile/desktop, pas de mise en page à deux
+colonnes sur grand écran) ; seuls `.adm-header`/`.adm-bottomnav` s'étirent en pleine largeur pour
+ancrer visuellement le chrome aux bords de l'écran. `@media (max-width: 640px)` ne fait plus que
+resserrer les paddings/tailles de police du header et de la barre d'action.
 
 **Synchronisation Firebase (Realtime Database, nœud `cantrip`)** — "Charger" (`fbLoadPersonnage()`)
 / "Sauvegarder" (`fbSavePersonnage()`) sont les **mêmes fonctions que dans `index.html`, dupliquées**

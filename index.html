@@ -1851,6 +1851,7 @@
         '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;flex:none" class="font-cinzel">Paramètres</div>' +
         '<div style="display:flex;flex-direction:column;gap:10px">' + itemsHtml + '</div>' +
         '<div style="flex:1"></div>' +
+        '<div data-action="open-admin" style="flex:none;text-align:center;font-size:11px;color:var(--text-dim);text-decoration:underline;cursor:pointer;padding-bottom:4px">Outil admin</div>' +
         '<div style="flex:none;text-align:center;font-size:11px;color:var(--text-muted);padding-bottom:2px">' + deployText + '</div>' +
       '</div>'
     );
@@ -2932,6 +2933,8 @@
         render();
         break;
       }
+
+      case 'open-admin': window.open('cantrip-admin.html', '_blank'); break;
 
       case 'damage': applyDamage(); break;
       case 'heal': applyHeal(); break;
