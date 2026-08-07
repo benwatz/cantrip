@@ -791,6 +791,7 @@ var ui = {
   accessCharacters: null, // null (jamais chargé) | tableau [{ charId, name, ownerUid, accessUids }]
   codexEntries: null, // null (jamais chargé) | tableau [{ id, prenom, nom, occupation, faction, lieu, portrait }]
   codexAccessUids: null, // null (jamais chargé) | tableau d'uids ayant accès au Codex dans l'app
+  codexCollapsed: true, // replié par défaut (54 PNJ à afficher, encombrant en continu sous le reste du panneau Accès)
   accessBusy: false,
   accessError: null
 };
@@ -2159,13 +2160,18 @@ function renderAccess() {
     '<div class="psec"><div class="psec-label">Personnages (accès par joueur)</div>' +
       (charactersHtml || '<div class="empty-hint">Aucun personnage sur Firebase pour l\'instant.</div>') +
     '</div>' +
-    '<div class="psec"><div class="psec-label">Codex — accès par joueur</div><div class="pcard" style="padding:10px 12px;">' +
-      codexAccessHtml +
-    '</div></div>' +
-    '<div class="psec"><div class="psec-label">Codex — PNJ</div>' +
-      codexImportHtml + codexEntriesHtml +
-      '<div class="padd" id="btnCodexAdd">+ Ajouter un PNJ</div>' +
-    '</div>' +
+    '<details id="codexCollapse"' + (ui.codexCollapsed ? '' : ' open') + ' style="border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;padding:10px 12px;">' +
+      '<summary style="cursor:pointer;font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">Codex</summary>' +
+      '<div style="margin-top:12px;display:flex;flex-direction:column;gap:14px;">' +
+        '<div class="psec"><div class="psec-label">Accès par joueur</div><div class="pcard" style="padding:10px 12px;">' +
+          codexAccessHtml +
+        '</div></div>' +
+        '<div class="psec"><div class="psec-label">PNJ</div>' +
+          codexImportHtml + codexEntriesHtml +
+          '<div class="padd" id="btnCodexAdd">+ Ajouter un PNJ</div>' +
+        '</div>' +
+      '</div>' +
+    '</details>' +
     '<button class="btn" id="btnAccessRefresh">Actualiser</button>';
 
   var refreshBtn = document.getElementById('btnAccessRefresh');
@@ -2208,6 +2214,8 @@ function renderAccess() {
   if (codexAddBtn) codexAddBtn.addEventListener('click', fbAddCodexEntry);
   var codexImportBtn = document.getElementById('btnCodexImport');
   if (codexImportBtn) codexImportBtn.addEventListener('click', fbImportSeedCodex);
+  var codexCollapse = document.getElementById('codexCollapse');
+  if (codexCollapse) codexCollapse.addEventListener('toggle', function () { ui.codexCollapsed = !codexCollapse.open; });
 }
 
 function fbLoadPersonnage() {
