@@ -39,33 +39,6 @@
     --admin-bg: #cbb27a;
     --admin-panel: #d9c393;
   }
-  :root[data-theme="deneor"] {
-    --bg-gradient-1: #1a3327;
-    --bg-gradient-2: #0d1b15;
-    --bg-deep: #0a1712;
-    --bg-card: #173224;
-    --bg-card-alt: #12281c;
-    --bg-nav: #0f2018;
-    --border-strong: #154734;
-    --border-tint: 90,170,130;
-    --text-main: #e7f1ea;
-    --text-gold: #e6c988;
-    --text-label: #a9c9b4;
-    --text-muted: #8caf9b;
-    --text-dim: #4f6f5c;
-    --text-desc: #cfe2d5;
-    --text-note: #83a692;
-    --text-chip: #bcd6c4;
-    --accent-red-text: #fca5a5;
-    --accent-green-text: #86efac;
-    --accent-blue-text: #7dd3fc;
-    --accent-purple-text: #c4b5fd;
-    --accent-gray-text: #cbd5e1;
-    --accent-gold-badge-text: #e0c890;
-    --bg-texture: rgba(255,255,255,0.012);
-    --admin-bg: #0e1f17;
-    --admin-panel: #14261c;
-  }
   * { box-sizing: border-box; }
   html, body { height:100%; margin:0; }
   body {
@@ -105,27 +78,36 @@
   .gate-hint{margin-top:12px;font-size:12px;color:var(--text-muted);}
   .gate-user{font-size:11px;color:var(--text-dim);word-break:break-all;margin-bottom:14px;}
 
-  /* ---- chrome principal (identité visuelle proche de l'app : en-tête léger, sélecteur de
-     personnage, contenu en une colonne, barre d'action fixe, nav basse à onglets) ---- */
+  /* ---- chrome principal (identité visuelle proche de l'app : en-tête avec navigation intégrée,
+     sélecteur de personnage compact, contenu en une colonne, barre d'action fixe) ---- */
   .app-root{display:flex;flex-direction:column;min-height:100vh;}
   .adm-header{
-    display:flex;align-items:center;justify-content:space-between;gap:10px;
-    padding:12px 20px;background:var(--admin-panel);border-bottom:1px solid rgba(var(--border-tint),0.3);
-    position:sticky;top:0;z-index:20;
+    display:flex;flex-direction:column;background:var(--admin-panel);
+    border-bottom:1px solid rgba(var(--border-tint),0.3);position:sticky;top:0;z-index:20;
+  }
+  .adm-header-top{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 20px 10px;
   }
   .adm-header-title{font-size:17px;color:var(--text-gold);letter-spacing:0.02em;}
   .adm-header-user{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-dim);}
   .adm-header-user .email{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .adm-header-user .btn{padding:6px 10px;font-size:11px;}
 
+  .adm-modebar{display:flex;}
+  .adm-navbtn{
+    flex:1;border:none;background:transparent;color:var(--text-dim);padding:11px 4px;font-size:12px;
+    font-weight:700;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;
+  }
+  .adm-navbtn.active{color:var(--text-gold);border-bottom-color:var(--border-strong);}
+
   .adm-charswitch{
-    display:flex;gap:8px;padding:12px 20px 0;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;
+    display:flex;align-items:center;gap:10px;padding:12px 20px 0;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;
   }
-  .charchip{
-    flex:1;text-align:center;padding:9px 8px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;
-    border:1px solid rgba(var(--border-tint),0.3);color:var(--text-label);background:var(--bg-card);
+  .charselect-label{flex:none;font-size:11px;color:var(--text-label);text-transform:uppercase;letter-spacing:0.06em;}
+  .charselect{
+    flex:1;height:40px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;
+    border:1px solid rgba(var(--border-tint),0.3);color:var(--text-main);background:var(--bg-card);font-family:inherit;
   }
-  .charchip.active{background:var(--border-strong);color:var(--ink-bright);border-color:var(--border-strong);}
 
   .adm-content{
     flex:1;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;padding:14px 16px 24px;
@@ -141,19 +123,9 @@
 
   .adm-actionbar{
     display:flex;gap:10px;padding:10px 16px;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box;
-    position:sticky;bottom:56px;background:var(--admin-bg);z-index:15;
+    position:sticky;bottom:0;background:var(--admin-bg);z-index:15;
   }
   .adm-actionbar .btn{flex:1;}
-
-  .adm-bottomnav{
-    display:flex;position:sticky;bottom:0;z-index:20;
-    background:var(--admin-panel);border-top:1px solid rgba(var(--border-tint),0.3);
-  }
-  .adm-navbtn{
-    flex:1;border:none;background:transparent;color:var(--text-dim);padding:11px 4px;font-size:12px;
-    font-weight:700;cursor:pointer;font-family:inherit;border-top:2px solid transparent;
-  }
-  .adm-navbtn.active{color:var(--text-gold);border-top-color:var(--border-strong);}
 
   .adm-syncfooter{font-size:11px;color:var(--text-dim);display:flex;gap:6px 16px;flex-wrap:wrap;}
   .adm-syncfooter .refresh-link{cursor:pointer;text-decoration:underline;color:var(--text-muted);}
@@ -244,9 +216,6 @@
     width:100%;background:rgba(255,255,255,0.5);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-main);
     padding:9px 11px;border-radius:6px;font-size:14px;font-family:inherit;
   }
-  :root[data-theme="deneor"] .field input, :root[data-theme="deneor"] .field select, :root[data-theme="deneor"] .field textarea{
-    background:rgba(0,0,0,0.25);
-  }
   .field textarea{resize:vertical;min-height:70px;}
   .field-row{display:flex;gap:10px;}
   .field-row .field{flex:1;}
@@ -258,11 +227,11 @@
   .toast.show{opacity:1;}
 
   @media (max-width: 640px) {
-    .adm-header{padding:10px 14px;}
+    .adm-header-top{padding:10px 14px 8px;}
     .adm-header-title{font-size:15px;}
     .adm-charswitch{padding:10px 14px 0;}
     .adm-content{padding:12px 12px 20px;}
-    .adm-actionbar{padding:8px 12px;bottom:52px;}
+    .adm-actionbar{padding:8px 12px;}
     .btn{padding:11px 14px;min-height:40px;}
     .modal{padding:16px;}
     .field-row{flex-wrap:wrap;}
@@ -275,8 +244,15 @@
 
 <div class="app-root" id="appRoot" style="display:none;">
   <header class="adm-header">
-    <div class="adm-header-title font-cinzel">Cantrip · Admin</div>
-    <div class="adm-header-user" id="admHeaderUser"></div>
+    <div class="adm-header-top">
+      <div class="adm-header-title font-cinzel">Cantrip · Admin</div>
+      <div class="adm-header-user" id="admHeaderUser"></div>
+    </div>
+    <nav class="adm-modebar">
+      <button class="adm-navbtn" id="btnModePersonnage" data-mode="personnage">Personnages</button>
+      <button class="adm-navbtn" id="btnModeGrimoire" data-mode="grimoire">Grimoires</button>
+      <button class="adm-navbtn" id="btnModeAcces" data-mode="acces">Accès</button>
+    </nav>
   </header>
 
   <div class="adm-charswitch" id="charSwitch"></div>
@@ -304,12 +280,6 @@
     <button class="btn" id="btnFbLoad">Charger</button>
     <button class="btn primary" id="btnFbSave">Sauvegarder</button>
   </div>
-
-  <nav class="adm-bottomnav" id="bottomNav">
-    <button class="adm-navbtn" id="btnModePersonnage" data-mode="personnage">Personnage</button>
-    <button class="adm-navbtn" id="btnModeGrimoire" data-mode="grimoire">Grimoire</button>
-    <button class="adm-navbtn" id="btnModeAcces" data-mode="acces">Accès</button>
-  </nav>
 </div>
 
 <!-- Modal: add/edit spell -->
@@ -839,18 +809,27 @@ function levelTabLabel(level) { return level === 'classe' ? 'Classe' : String(le
 
 // ---- render ----
 function render() {
-  document.documentElement.setAttribute('data-theme', ui.activeChar === 'deneor' ? 'deneor' : 'calix');
+  // Thème toujours neutre (Calix) dans l'outil admin, quel que soit le personnage édité — évite
+  // de brouiller la lecture des formulaires avec le thème sombre de Deneor.
 
-  // sélecteur de personnage
+  // sélecteur de personnage : liste déroulante plutôt qu'une rangée de chips (qui s'encombrerait
+  // avec plus de deux personnages) ; même sélecteur, identique en mode Personnages et Grimoires,
+  // masqué en mode Accès qui gère déjà tous les personnages dans son propre tableau.
   var sw = document.getElementById('charSwitch');
-  sw.innerHTML = ['calix', 'deneor'].map(function (c) {
-    return '<div class="charchip' + (ui.activeChar === c ? ' active' : '') + '" data-char="' + c + '">' + escapeHtml(CHARACTER_NAMES[c]) + '</div>';
-  }).join('');
-  sw.querySelectorAll('.charchip').forEach(function (el) {
-    el.addEventListener('click', function () { ui.activeChar = el.getAttribute('data-char'); ui.activeLevel = null; render(); });
-  });
+  sw.style.display = ui.mode === 'acces' ? 'none' : 'flex';
+  if (ui.mode !== 'acces') {
+    sw.innerHTML = '<label class="charselect-label" for="charSelect">Personnage</label>' +
+      '<select id="charSelect" class="charselect">' +
+      ['calix', 'deneor'].map(function (c) {
+        return '<option value="' + c + '"' + (ui.activeChar === c ? ' selected' : '') + '>' + escapeHtml(CHARACTER_NAMES[c]) + '</option>';
+      }).join('') +
+      '</select>';
+    document.getElementById('charSelect').addEventListener('change', function () {
+      ui.activeChar = this.value; ui.activeLevel = null; render();
+    });
+  }
 
-  // onglets de navigation (Personnage / Grimoire / Accès — Accès réservé à l'admin)
+  // onglets de navigation (Personnages / Grimoires / Accès — Accès réservé à l'admin)
   var btnPerso = document.getElementById('btnModePersonnage');
   var btnGrim = document.getElementById('btnModeGrimoire');
   var btnAcces = document.getElementById('btnModeAcces');

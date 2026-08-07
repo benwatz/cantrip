@@ -809,16 +809,32 @@ dans l'app `index.html` n'est lui pas affecté, ces règles sont indépendantes)
 
 **Chrome principal, style "app mobile"** (remplace l'ancienne barre du haut à 2 zones +
 mise en page côte à côte téléphone/panneau latéral, jugée mal organisée) — repris du langage visuel
-de Cantrip lui-même plutôt que d'un habillage "outil d'admin" générique :
-- `.adm-header` (bandeau sticky en haut, pleine largeur) : titre + email du compte connecté +
-  bouton "Déconnexion" (`fbAuth.signOut()`).
-- `.adm-charswitch` : deux chips pleine-largeur Calix/Deneor (remplace `#btnCharCalix`/
-  `#btnCharDeneor`), même rôle qu'avant (`ui.activeChar`).
+de Cantrip lui-même plutôt que d'un habillage "outil d'admin" générique. Thème visuel figé sur
+Calix (2026-08-08) : contrairement à `index.html`, l'outil admin n'applique plus jamais le thème
+sombre de Deneor même quand ce personnage est sélectionné (édition/lecture plus confortables avec
+une seule palette stable) — `render()` ne pose plus `data-theme` sur `<html>`, et le bloc CSS
+`:root[data-theme="deneor"]` (ainsi que son override `.field input/select/textarea`) a été retiré
+du fichier, devenu mort.
+- `.adm-header` (bandeau sticky en haut, pleine largeur, deux lignes) : `.adm-header-top` (titre +
+  email du compte connecté + bouton "Déconnexion", `fbAuth.signOut()`) puis `.adm-modebar`
+  (2026-08-08, remplace `.adm-bottomnav` en bas de page) — les trois boutons de navigation
+  **Personnages** / **Grimoires** / **Accès** (`#btnModePersonnage`/`#btnModeGrimoire`/
+  `#btnModeAcces`, libellés au pluriel, corrigés depuis le singulier d'origine) sont montés dans la
+  barre de titre elle-même plutôt qu'en bas de page, avec un soulignement (`border-bottom`) sous
+  l'onglet actif façon onglets classiques. L'onglet Accès reste masqué (`display:none`) si
+  `authState.isAdmin` est faux, cohérent avec la restriction de lecture RTDB décrite plus haut.
+- `.adm-charswitch` (2026-08-08, remplace les deux chips pleine-largeur Calix/Deneor) : un unique
+  `<select id="charSelect">` étiqueté "Personnage" plutôt qu'une rangée de boutons — pensé pour ne
+  pas s'encombrer visuellement le jour où l'outil gérera plus de deux personnages (les chips
+  grandissaient linéairement avec leur nombre). **Rendu à l'identique dans les modes Personnages et
+  Grimoires** (même bloc de code dans `render()`, aucune divergence entre les deux), masqué en mode
+  Accès où il n'a pas de sens (ce panneau gère déjà tous les personnages dans son propre tableau).
 - `.adm-toolbar` (`renderPanelToolbar()`, remplace l'ancien `#sidePanel` "Comment ça marche" à côté
   du mockup téléphone) : actions rapides contextuelles au mode affiché ("Gérer les niveaux" /
-  "Réinitialiser le Grimoire" en mode Grimoire, "Réinitialiser les Personnages" en mode Personnage,
-  rien en mode Accès) plus un `<details class="adm-help">` replié par défaut pour l'explication
-  longue (autrefois toujours visible dans le panneau latéral, jugée trop encombrante en continu).
+  "Réinitialiser le Grimoire" en mode Grimoires, "Réinitialiser les Personnages" en mode
+  Personnages, rien en mode Accès) plus un `<details class="adm-help">` replié par défaut pour
+  l'explication longue (autrefois toujours visible dans le panneau latéral, jugée trop encombrante
+  en continu).
 - Contenu (`.adm-content`, une seule colonne, `max-width:640px` centrée même en large desktop —
   volontaire, pour rester lisible comme l'app plutôt que d'étaler le formulaire sur toute la
   largeur d'un écran PC) : `#phone`/`#personPanel`/`#accessPanel` partagent maintenant la classe
@@ -829,12 +845,9 @@ de Cantrip lui-même plutôt que d'un habillage "outil d'admin" générique :
   "+ Ajouter un sort" en flux normal (`.padd`, même style que "+ Ajouter une arme"/"+ Ajouter une
   ressource" du panneau Personnage) — l'ancien FAB chevauchait visuellement la nouvelle barre
   d'action fixe en bas.
-- `.adm-actionbar` (sticky, juste au-dessus de la nav basse) : "Charger"/"Sauvegarder"
-  (`#btnFbLoad`/`#btnFbSave`), masquée en mode Accès (ces deux actions n'ont pas de sens ici).
-- `.adm-bottomnav` (sticky en bas, pleine largeur) : onglets Personnage / Grimoire / Accès
-  (`#btnModePersonnage`/`#btnModeGrimoire`/`#btnModeAcces`) — l'onglet Accès est masqué
-  (`display:none`) si `authState.isAdmin` est faux, cohérent avec la restriction de lecture RTDB
-  décrite plus haut.
+- `.adm-actionbar` (sticky, tout en bas de page depuis le retrait de `.adm-bottomnav`) :
+  "Charger"/"Sauvegarder" (`#btnFbLoad`/`#btnFbSave`), masquée en mode Accès (ces deux actions n'ont
+  pas de sens ici).
 
 Le panneau "Accès" (voir section Synchronisation cloud) utilise désormais aussi `.panel-card`/
 `.pcard`/`.prow` (plus le mockup téléphone qu'il empruntait par erreur visuelle à l'origine — un
@@ -842,9 +855,9 @@ tableau de gestion d'utilisateurs n'a pas vocation à ressembler à un télépho
 
 Responsive : `.adm-content`/`.adm-charswitch`/`.adm-actionbar` restent centrés à `max-width:640px`
 quelle que soit la largeur de fenêtre (identique mobile/desktop, pas de mise en page à deux
-colonnes sur grand écran) ; seuls `.adm-header`/`.adm-bottomnav` s'étirent en pleine largeur pour
-ancrer visuellement le chrome aux bords de l'écran. `@media (max-width: 640px)` ne fait plus que
-resserrer les paddings/tailles de police du header et de la barre d'action.
+colonnes sur grand écran) ; seul `.adm-header` s'étire en pleine largeur pour ancrer visuellement le
+chrome au bord supérieur de l'écran. `@media (max-width: 640px)` ne fait plus que resserrer les
+paddings/tailles de police du header et de la barre d'action.
 
 **Synchronisation Firebase (Realtime Database, nœud `cantrip`)** — "Charger" (`fbLoadPersonnage()`)
 / "Sauvegarder" (`fbSavePersonnage()`) sont les **mêmes fonctions que dans `index.html`, dupliquées**
