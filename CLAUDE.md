@@ -663,7 +663,10 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   utilisateur approuvé).
   `fbLoadAccessData()`/`fbApproveAccess()`/`fbDenyAccess()`/`fbRevokeAccess()` sont propres à
   `cantrip-admin.html` (pas dans `index.html`, qui ne fait qu'émettre des demandes, jamais les
-  gérer).
+  gérer). Le panneau latéral "Comment ça marche" (`#sidePanel`, commun aux modes Personnage/
+  Grimoire) est masqué en mode Accès (`renderSidePanel()` retourne tôt avec `display:none` si
+  `ui.mode === 'acces'`) — son contenu (explications Personnage/Grimoire, boutons de
+  réinitialisation) n'a pas de sens pour la gestion des accès.
 - **Config client** (`FIREBASE_CONFIG`, dupliquée dans `index.html` et `cantrip-admin.html`,
   même convention que le reste des constantes de sync) : n'est pas un secret, comme l'ancien
   Client ID OAuth Drive — les règles RTDB ci-dessus sont la vraie barrière d'accès, pas la config.
