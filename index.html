@@ -337,6 +337,10 @@
     return 'cr_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
   }
 
+  function generateCharacterId() {
+    return 'char_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
   function makeClassResource(label, max, type) {
     var resource = { id: generateId(), label: label || 'Ressource de Classe', max: max || 0, type: type === 'counter' ? 'counter' : 'badges', used: [] };
     if (resource.type === 'counter') resource.current = resource.max;
@@ -582,7 +586,8 @@
       activeProfileIndex: 0,
       profiles: [cloneDeep(characters.calix.savedProfile)],
       activeCharacterId: 'calix',
-      characters: characters
+      characters: characters,
+      characterOrder: CHARACTER_ORDER.slice()
     };
   }
 
@@ -605,9 +610,11 @@
           var c = parsed.characters[id];
           if (!c || typeof c !== 'object') { parsed.characters[id] = defaults[id]; return; }
           c.id = id;
-          // name/subtitle/level/portrait/theme ne sont éditables nulle part dans l'UI : toujours
-          // resynchronisés depuis les valeurs par défaut du code pour que les corrections de texte
-          // (typos, etc.) atteignent aussi les sauvegardes existantes, pas seulement les nouvelles.
+          // name/subtitle/level/portrait/theme ne sont éditables nulle part dans l'UI pour Calix/
+          // Deneor : toujours resynchronisés depuis les valeurs par défaut du code pour que les
+          // corrections de texte (typos, etc.) atteignent aussi les sauvegardes existantes, pas
+          // seulement les nouvelles. Ne s'applique pas aux personnages créés dynamiquement
+          // (ci-dessous) : eux n'ont pas de valeurs par défaut codées en dur à resynchroniser.
           c.name = defaults[id].name;
           c.subtitle = defaults[id].subtitle;
           c.level = defaults[id].level;
@@ -616,9 +623,40 @@
           if (!c.savedProfile || typeof c.savedProfile !== 'object') c.savedProfile = defaults[id].savedProfile;
           else sanitizeProfile(c.savedProfile);
           if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
+          else sanitizeGrimoire(c.grimoire);
+        });
+        // Personnages créés dynamiquement (CRUD local, août 2026) : mêmes garanties de forme que
+        // Calix/Deneor sur savedProfile/grimoire, mais sans resynchronisation de l'identité — elle
+        // n'existe que dans state, il n'y a pas de "défaut code" vers lequel revenir.
+        Object.keys(parsed.characters).forEach(function (id) {
+          if (CHARACTER_ORDER.indexOf(id) !== -1) return;
+          var c = parsed.characters[id];
+          if (!c || typeof c !== 'object') { delete parsed.characters[id]; return; }
+          c.id = id;
+          if (typeof c.name !== 'string' || !c.name) c.name = 'Nouveau personnage';
+          if (typeof c.subtitle !== 'string') c.subtitle = '';
+          if (typeof c.level !== 'number') c.level = null;
+          if (typeof c.portrait !== 'string' || !c.portrait) c.portrait = null;
+          if (typeof c.theme !== 'string') c.theme = 'calix';
+          if (!c.savedProfile || typeof c.savedProfile !== 'object') c.savedProfile = defaultProfile();
+          sanitizeProfile(c.savedProfile);
+          if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
+          else sanitizeGrimoire(c.grimoire);
         });
       }
-      if (parsed.activeCharacterId !== 'calix' && parsed.activeCharacterId !== 'deneor') parsed.activeCharacterId = 'calix';
+
+      var knownIds = Object.keys(parsed.characters);
+      if (!Array.isArray(parsed.characterOrder)) {
+        parsed.characterOrder = CHARACTER_ORDER.filter(function (id) { return knownIds.indexOf(id) !== -1; });
+      } else {
+        parsed.characterOrder = parsed.characterOrder.filter(function (id) { return knownIds.indexOf(id) !== -1; });
+      }
+      // Filet de sécurité : tout personnage présent dans state.characters mais absent de l'ordre
+      // (ex. characterOrder corrompu/tronqué) reste accessible plutôt que de disparaître de la nav.
+      knownIds.forEach(function (id) { if (parsed.characterOrder.indexOf(id) === -1) parsed.characterOrder.push(id); });
+      if (!parsed.characterOrder.length) parsed.characterOrder = CHARACTER_ORDER.slice();
+
+      if (parsed.characterOrder.indexOf(parsed.activeCharacterId) === -1) parsed.activeCharacterId = parsed.characterOrder[0];
       return parsed;
     } catch (e) {
       return defaultState();
@@ -728,7 +766,7 @@
 
   // ---- ephemeral UI state (not persisted) ----
   var ui = {
-    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'settings' | 'settings-character' | 'settings-load-character' | 'settings-codex'
+    view: 'tracker', // 'tracker' | 'stats' | 'grimoire' | 'settings' | 'settings-character' | 'settings-load-character' | 'settings-codex' | 'settings-grimoire'
     editingMax: false,
     editingTemp: false,
     editingCombatStat: null, // null | 'ac' | 'initiative' | 'speed' — édition inline des tuiles CA/Initiative/Déplacement sur le Tracker
@@ -743,8 +781,13 @@
     settingsLevelError: '',
     settingsCharacterEditing: false, // verrouille/déverrouille Paramétrer le Personnage
     settingsCharacterDraft: null, // copie de travail du profil pendant l'édition ; committée par "Valider"
+    settingsGrimoireEditing: false, // verrouille/déverrouille Paramétrer le Grimoire
+    settingsGrimoireDraft: null, // copie de travail de state.characters[activeCharacterId].grimoire pendant l'édition
+    settingsGrimoireCollapsed: {}, // { [sectionIndex]: bool } — undefined/true = repliée (défaut, pour éviter un mur de sorts à l'ouverture), false = explicitement dépliée par l'utilisateur ; réinitialisé à chaque entrée en édition
+    grimoireSpellEdit: null, // null | { sectionIndex, spellIndex, leaving: bool } — popup d'édition d'un sort dans "Paramétrer le Grimoire" (remplace l'ancien formulaire inline par sort)
+    grimoireSpellEditEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     disableLevelDialog: null, // { level: number } quand la confirmation de désactivation est ouverte
-    characterCarouselIndex: 0, // index dans CHARACTER_ORDER, propre à l'écran "Charger un personnage"
+    characterCarouselIndex: 0, // index dans state.characterOrder, propre à l'écran "Charger un personnage"
     characterCarouselAnimDirection: null, // 'next' | 'prev' | null — consommé une fois par renderSettingsLoadCharacter()
     goldModalOpen: false,
     goldModalDraft: 0, // copie de travail de profile().gold pendant la modale ; committée par "Valider"
@@ -758,6 +801,8 @@
     restToast: null, // null | { leaving: bool } — confirmation "Vous êtes reposé(e)." après la modale Repos
     restToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     fbConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Firebase est ouverte
+    createCharacterModal: null, // { name: string } quand la modale "Créer un personnage" est ouverte
+    deleteCharacterConfirm: null, // { charId } quand la confirmation de suppression est ouverte (jamais pour calix/deneor)
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
@@ -771,6 +816,10 @@
   // Cible des mutations dans "Paramétrer le Personnage" : le profil réel si verrouillé (ne devrait
   // pas arriver, les champs sont désactivés), sinon le brouillon en cours d'édition.
   function settingsCharacterProfile() { return ui.settingsCharacterEditing ? ui.settingsCharacterDraft : profile(); }
+
+  // Cible des mutations dans "Paramétrer le Grimoire" : le brouillon en cours d'édition, sinon le
+  // grimoire effectif du personnage actif (lecture seule hors édition).
+  function settingsGrimoireData() { return ui.settingsGrimoireEditing ? ui.settingsGrimoireDraft : characterGrimoire(state.activeCharacterId); }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function toInt(v, fallback) {
@@ -816,8 +865,9 @@
   function iconTracker(filled) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-10-9.3C.5 8 2 4.5 5.6 4c2-.3 3.7.7 4.9 2.3C11.7 4.7 13.4 3.7 15.4 4 19 4.5 20.5 8 19 11.7 16.5 16.4 12 21 12 21z"/></svg>';
   }
-  function iconCharacter(filled) {
-    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5v-1.2a5.3 5.3 0 015.3-5.3h4.4a5.3 5.3 0 015.3 5.3v1.2"/></svg>';
+  function iconCharacter(filled, size) {
+    var s = size || 20;
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 20.5v-1.2a5.3 5.3 0 015.3-5.3h4.4a5.3 5.3 0 015.3 5.3v1.2"/></svg>';
   }
   function iconBook(filled) {
     if (!filled) {
@@ -984,12 +1034,46 @@
     ]
   };
 
-  // Grimoire d'un personnage : celui chargé depuis Firebase (state.characters[id].grimoire) s'il
-  // existe, sinon le contenu par défaut codé en dur (SPELLBOOK/DENEOR_SPELLBOOK).
+  function makeGrimoireSpell() {
+    return { name: 'Nouveau sort', type: '', range: '', desc: '', note: '' };
+  }
+  function makeGrimoireSection() {
+    return { title: 'Nouvelle section', levelTag: 'Niv. 1', level: 1, spells: [] };
+  }
+  var EMPTY_GRIMOIRE = { sections: [] };
+
+  // Normalise la forme d'un grimoire (sections/sorts), que ce soit au chargement de state ou pour
+  // le brouillon de l'éditeur "Paramétrer le Grimoire" — pas d'id sur les sections/sorts (adressage par
+  // index dans le tableau), même convention que cantrip-admin.html.
+  function sanitizeGrimoire(g) {
+    if (!g || typeof g !== 'object' || !Array.isArray(g.sections)) return cloneDeep(EMPTY_GRIMOIRE);
+    g.sections.forEach(function (s) {
+      if (typeof s.title !== 'string') s.title = '';
+      if (typeof s.levelTag !== 'string') s.levelTag = '';
+      if (s.level !== 'classe' && (typeof s.level !== 'number' || isNaN(s.level))) s.level = 0;
+      if (typeof s.level === 'number') s.level = clamp(Math.round(s.level), 0, 9);
+      if (!Array.isArray(s.spells)) s.spells = [];
+      s.spells.forEach(function (sp) {
+        if (typeof sp.name !== 'string') sp.name = '';
+        if (typeof sp.type !== 'string') sp.type = '';
+        if (typeof sp.range !== 'string') sp.range = '';
+        if (typeof sp.desc !== 'string') sp.desc = '';
+        if (typeof sp.note !== 'string') sp.note = '';
+      });
+    });
+    return g;
+  }
+
+  // Grimoire d'un personnage : celui chargé depuis Firebase ou édité en jeu (state.characters[id]
+  // .grimoire) s'il existe, sinon le contenu par défaut codé en dur pour Calix/Deneor (SPELLBOOK/
+  // DENEOR_SPELLBOOK), sinon un grimoire vide (futurs personnages créés dynamiquement — un ID
+  // inconnu ne doit jamais retomber sur le grimoire d'un des deux personnages historiques).
   function characterGrimoire(charId) {
     var loaded = state.characters[charId] && state.characters[charId].grimoire;
     if (loaded && Array.isArray(loaded.sections)) return loaded;
-    return charId === 'deneor' ? DENEOR_SPELLBOOK : SPELLBOOK;
+    if (charId === 'calix') return SPELLBOOK;
+    if (charId === 'deneor') return DENEOR_SPELLBOOK;
+    return EMPTY_GRIMOIRE;
   }
 
   function activeSpellbook() {
@@ -1103,6 +1187,7 @@
       case 'grimoire': return renderGrimoire();
       case 'settings': return renderSettings();
       case 'settings-character': return renderSettingsCharacter();
+      case 'settings-grimoire': return renderSettingsGrimoire();
       case 'settings-load-character': return renderSettingsLoadCharacter();
       case 'settings-codex': return renderSettingsCodex();
       default: return renderTracker();
@@ -1145,6 +1230,12 @@
     if (ui.fbConfirm) {
       app.insertAdjacentHTML('beforeend', renderFbConfirmModal());
     }
+    if (ui.createCharacterModal) {
+      app.insertAdjacentHTML('beforeend', renderCreateCharacterModal());
+    }
+    if (ui.deleteCharacterConfirm) {
+      app.insertAdjacentHTML('beforeend', renderDeleteCharacterModal());
+    }
     if (ui.concentrationToast) {
       app.insertAdjacentHTML('beforeend', renderConcentrationToast());
     }
@@ -1159,6 +1250,9 @@
     }
     if (ui.spellDetail) {
       app.insertAdjacentHTML('beforeend', renderSpellDetailModal());
+    }
+    if (ui.grimoireSpellEdit) {
+      app.insertAdjacentHTML('beforeend', renderGrimoireSpellEditModal());
     }
     var nextScroller = app.querySelector('[data-scroll-root]');
     if (nextScroller) nextScroller.scrollTop = scrollTop;
@@ -1212,6 +1306,18 @@
         (typeText ? '<div style="font-size:16.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center">' + typeText + '</div>' : '') +
       '</div>' +
     '</div>';
+  }
+
+  // Avatar d'un personnage (Tracker, carrousel "Charger un personnage") : portrait statique s'il
+  // existe (Calix/Deneor uniquement — les personnages créés dynamiquement n'ont pas de fichier
+  // portrait), sinon une icône générique dans un cercle teinté, pour qu'un personnage tout juste
+  // créé ne laisse pas un espace vide à la place de l'avatar.
+  function renderCharacterAvatar(character, size, extraStyle) {
+    var s = size || 38;
+    if (character && character.portrait) {
+      return '<img src="' + escapeHtml(character.portrait) + '" alt="" draggable="false" style="flex:none;width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.35);' + (extraStyle || '') + '"/>';
+    }
+    return '<div style="flex:none;width:' + s + 'px;height:' + s + 'px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(var(--border-tint),0.16);border:1px solid rgba(var(--border-tint),0.35);color:var(--text-muted);' + (extraStyle || '') + '">' + iconCharacter(false, Math.round(s * 0.5)) + '</div>';
   }
 
   function renderTracker() {
@@ -1347,7 +1453,7 @@
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
           '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">' +
-            (activeCharacter && activeCharacter.portrait ? '<img src="' + escapeHtml(activeCharacter.portrait) + '" alt="" style="flex:none;width:38px;height:38px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.35)"/>' : '') +
+            renderCharacterAvatar(activeCharacter, 38) +
             '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="font-cinzel">' + escapeHtml(p.characterName) + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:10px;flex:none">' +
@@ -1492,6 +1598,57 @@
         '<div style="font-size:12.5px;color:var(--text-muted)">' + escapeHtml(spell.range) + '</div>' +
         '<div style="font-size:14px;color:var(--text-desc);line-height:1.5">' + escapeHtml(spell.desc) + '</div>' +
         (spell.note ? '<div style="font-size:12.5px;color:var(--text-note);font-style:italic;line-height:1.4;border-top:1px solid rgba(var(--border-tint),0.16);padding-top:10px">' + escapeHtml(spell.note) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  // Popup d'édition d'un sort dans "Paramétrer le Grimoire" (tap sur une ligne compacte pendant
+  // l'édition, ui.grimoireSpellEdit). Même gabarit visuel et même animation enter/leave que
+  // renderSpellDetailModal (réutilise les classes CSS spell-detail-backdrop/-card), mais contient
+  // de vrais champs de saisie — donc, contrairement à la popup de lecture, le fond n'a volontairement
+  // pas de data-action="close..." (un tap dans un champ bulle jusqu'au fond et le fermerait sinon,
+  // aucun stopPropagation ne rattraperait ça) : fermeture uniquement via la croix ou le bouton
+  // "Terminé", même convention que les modales Créer/Supprimer un personnage. Les champs réutilisent
+  // tels quels les data-action grimoire-spell-name/-type/-range/-desc/-note déjà câblés dans
+  // bindEvents() pour le formulaire inline historique — bindEvents() est ré-exécuté après l'ajout de
+  // cette popup au DOM (voir render()), donc ces listeners s'attachent aussi à ses champs.
+  function renderGrimoireSpellEditModal() {
+    var st = ui.grimoireSpellEdit;
+    var g = settingsGrimoireData();
+    var section = g.sections[st.sectionIndex];
+    var spell = section && section.spells[st.spellIndex];
+    if (!spell) return '';
+    var entering = ui.grimoireSpellEditEnterPending;
+    ui.grimoireSpellEditEnterPending = false;
+    var leaving = st.leaving;
+    var backdropAnim = leaving ? 'spell-detail-backdrop-leave' : (entering ? 'spell-detail-backdrop-enter' : '');
+    var cardAnim = leaving ? 'spell-detail-card-leave' : (entering ? 'spell-detail-card-enter' : '');
+    var sIdx = st.sectionIndex, spIdx = st.spellIndex;
+    return '<div class="spell-detail-backdrop ' + backdropAnim + '">' +
+      '<div class="spell-detail-card ' + cardAnim + '">' +
+        '<div style="display:flex;align-items:flex-start;gap:10px">' +
+          '<input type="text" data-action="grimoire-spell-name" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.name) + '" placeholder="Nom du sort" style="flex:1;min-width:0;height:38px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:15px;font-weight:700;padding:0 10px;box-sizing:border-box;font-family:\'Cinzel\',serif"/>' +
+          '<div data-action="close-grimoire-spell-edit" style="flex:none;width:32px;height:32px;border-radius:16px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.3);display:flex;align-items:center;justify-content:center;color:var(--text-main);cursor:pointer">' + iconClose() + '</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+            '<label style="font-size:10px;color:var(--text-muted)">Type</label>' +
+            '<input type="text" data-action="grimoire-spell-type" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.type) + '" placeholder="ACTION, BONUS…" style="width:100%;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:0 8px;box-sizing:border-box"/>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
+            '<label style="font-size:10px;color:var(--text-muted)">Portée</label>' +
+            '<input type="text" data-action="grimoire-spell-range" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" value="' + escapeHtml(spell.range) + '" placeholder="9m · Conc. 1 min" style="width:100%;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:0 8px;box-sizing:border-box"/>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+          '<label style="font-size:10px;color:var(--text-muted)">Description</label>' +
+          '<textarea data-action="grimoire-spell-desc" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Effet du sort" style="width:100%;min-height:80px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;padding:8px 10px;box-sizing:border-box;font-family:inherit;line-height:1.4;resize:vertical">' + escapeHtml(spell.desc) + '</textarea>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+          '<label style="font-size:10px;color:var(--text-muted)">Note d\'usage</label>' +
+          '<textarea data-action="grimoire-spell-note" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" placeholder="Conseil d\'utilisation" style="width:100%;min-height:52px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12.5px;padding:8px 10px;box-sizing:border-box;font-family:inherit;font-style:italic;line-height:1.4;resize:vertical">' + escapeHtml(spell.note) + '</textarea>' +
+        '</div>' +
+        '<div data-action="close-grimoire-spell-edit" style="flex:none;height:44px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Terminé</div>' +
       '</div>' +
     '</div>';
   }
@@ -1643,8 +1800,9 @@
 
   function renderSettings() {
     var menuItems = [
-      { view: 'settings-character', label: 'Paramétrer les statistiques' },
-      { view: 'settings-load-character', label: 'Gestion des personnages' },
+      { view: 'settings-character', label: 'Paramétrer le personnage' },
+      { view: 'settings-grimoire', label: 'Paramétrer le Grimoire' },
+      { view: 'settings-load-character', label: 'Charger un personnage' },
       { view: 'settings-codex', label: 'Codex' }
     ];
     var itemsHtml = menuItems.map(function (item) {
@@ -1881,9 +2039,108 @@
 
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
-        renderSettingsHeader('Paramétrer les statistiques') +
+        renderSettingsHeader('Paramétrer le personnage') +
         '<div data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px">' +
           blocks.join(SETTINGS_SEPARATOR) +
+        '</div>' +
+        footerHtml +
+      '</div>'
+    );
+  }
+
+  var GRIMOIRE_LEVEL_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  function renderSettingsGrimoire() {
+    var editing = ui.settingsGrimoireEditing;
+    var locked = !editing;
+    var g = settingsGrimoireData();
+    var lockedRowStyle = locked ? 'pointer-events:none;opacity:0.45;' : '';
+
+    var sectionsHtml = g.sections.map(function (section, sIdx) {
+      var isFirst = sIdx === 0;
+      var isLast = sIdx === g.sections.length - 1;
+      // Repliée par défaut (undefined/true) — seul un dépliage explicite (false) montre la liste.
+      var collapsed = ui.settingsGrimoireCollapsed[sIdx] !== false;
+
+      var sectionReorderHtml =
+        '<div style="flex:none;display:flex;flex-direction:column;gap:2px;' + lockedRowStyle + '">' +
+          '<div data-action="move-grimoire-section-up" data-section-index="' + sIdx + '" style="width:22px;height:17px;border-radius:5px 5px 0 0;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (isFirst ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9650;</div>' +
+          '<div data-action="move-grimoire-section-down" data-section-index="' + sIdx + '" style="width:22px;height:17px;border-radius:0 0 5px 5px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.3);border-top:none;color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (isLast ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9660;</div>' +
+        '</div>';
+
+      // Ligne compacte par sort (nom + type/portée en résumé) : le formulaire complet (nom, type,
+      // portée, description, note) vit désormais dans une popup dédiée (renderGrimoireSpellEditModal)
+      // ouverte au tap, plutôt que dans un pavé de champs empilé ici — évite le mur de champs qui
+      // rendait la page illisible dès qu'une section avait plus de deux ou trois sorts. Hors édition,
+      // le tap réutilise la popup de détail en lecture seule déjà utilisée par le Grimoire du joueur.
+      var spellsHtml = section.spells.map(function (spell, spIdx) {
+        var spIsFirst = spIdx === 0;
+        var spIsLast = spIdx === section.spells.length - 1;
+        var spellReorderHtml =
+          '<div style="flex:none;display:flex;flex-direction:column;gap:2px;' + lockedRowStyle + '">' +
+            '<div data-action="move-grimoire-spell-up" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="width:22px;height:17px;border-radius:5px 5px 0 0;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (spIsFirst ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9650;</div>' +
+            '<div data-action="move-grimoire-spell-down" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="width:22px;height:17px;border-radius:0 0 5px 5px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-top:none;color:var(--text-muted);font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + (spIsLast ? 'opacity:0.3;pointer-events:none;' : '') + '">&#9660;</div>' +
+          '</div>';
+        var summary = [spell.type, spell.range].filter(function (part) { return part; }).join(' · ');
+        var openAttrs = locked
+          ? 'data-action="open-spell-detail" data-name="' + escapeHtml(spell.name) + '"'
+          : 'data-action="open-grimoire-spell-edit" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '"';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-deep);border-radius:10px;border:1px solid rgba(var(--border-tint),0.16)">' +
+          spellReorderHtml +
+          '<div ' + openAttrs + ' style="flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:2px 0">' +
+            (spell.name
+              ? '<div style="font-size:13px;font-weight:700;color:var(--text-main);font-family:\'Cinzel\',serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(spell.name) + '</div>'
+              : '<div style="font-size:13px;font-weight:700;font-style:italic;color:var(--text-dim)">Sans nom</div>') +
+            (summary ? '<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(summary) + '</div>' : '') +
+          '</div>' +
+          '<div style="flex:none;color:var(--text-dim);display:flex">' + iconChevronRight(14) + '</div>' +
+          '<div data-action="remove-grimoire-spell" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
+        '</div>';
+      }).join('');
+
+      var levelSelectHtml = '<select data-action="grimoire-section-level" data-section-index="' + sIdx + '" ' + (locked ? 'disabled' : '') + ' style="flex:1;height:34px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box">' +
+        GRIMOIRE_LEVEL_OPTIONS.map(function (lv) { return '<option value="' + lv + '"' + (section.level === lv ? ' selected' : '') + '>' + (lv === 0 ? 'Sorts mineurs (0)' : 'Niveau ' + lv) + '</option>'; }).join('') +
+        '<option value="classe"' + (section.level === 'classe' ? ' selected' : '') + '>Classe</option>' +
+      '</select>';
+
+      var countBadgeHtml = collapsed
+        ? '<div style="flex:none;background:rgba(var(--border-tint),0.12);border:1px solid rgba(var(--border-tint),0.32);color:var(--text-chip);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap">' + section.spells.length + (section.spells.length > 1 ? ' sorts' : ' sort') + '</div>'
+        : '';
+
+      return '<div style="display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid rgba(var(--border-tint),0.2)">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          sectionReorderHtml +
+          '<div data-action="toggle-grimoire-section-collapse" data-section-index="' + sIdx + '" style="flex:none;width:34px;height:34px;border-radius:8px;background:rgba(var(--border-tint),0.14);border:1px solid rgba(var(--border-tint),0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);transform:rotate(' + (collapsed ? '0' : '90') + 'deg);transition:transform 0.15s">' + iconChevronRight(16) + '</div>' +
+          '<input type="text" data-action="grimoire-section-title" data-section-index="' + sIdx + '" value="' + escapeHtml(section.title) + '" placeholder="Titre de section" ' + (locked ? 'disabled' : '') + ' style="flex:1;min-width:0;height:36px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:13px;font-weight:600;padding:0 10px;box-sizing:border-box"/>' +
+          countBadgeHtml +
+          '<div data-action="remove-grimoire-section" data-section-index="' + sIdx + '" style="flex:none;width:36px;height:36px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
+        '</div>' +
+        (collapsed ? '' :
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<label style="font-size:11px;color:var(--text-muted)">Étiquette</label>' +
+            '<input type="text" data-action="grimoire-section-level-tag" data-section-index="' + sIdx + '" value="' + escapeHtml(section.levelTag) + '" placeholder="Niv. 1" maxlength="16" ' + (locked ? 'disabled' : '') + ' style="width:90px;height:34px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:8px;color:var(--text-main);font-size:12px;padding:0 8px;box-sizing:border-box"/>' +
+            '<label style="font-size:11px;color:var(--text-muted)">Niveau</label>' +
+            levelSelectHtml +
+          '</div>' +
+          (section.spells.length ? '<div style="display:flex;flex-direction:column;gap:8px">' + spellsHtml + '</div>' : '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:8px 0">Aucun sort dans cette section.</div>') +
+          '<div data-action="add-grimoire-spell" data-section-index="' + sIdx + '" style="height:40px;border-radius:10px;background:var(--bg-deep);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;' + lockedRowStyle + '">+ Ajouter un sort</div>'
+        ) +
+      '</div>';
+    }).join('');
+
+    var footerHtml = editing
+      ? '<div style="display:flex;gap:10px;flex:none">' +
+          '<div data-action="cancel-edit-grimoire" style="flex:1;height:48px;border-radius:10px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-edit-grimoire" style="flex:1;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Valider</div>' +
+        '</div>'
+      : '<div data-action="start-edit-grimoire" style="flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Modifier</div>';
+
+    return (
+      '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
+        renderSettingsHeader('Paramétrer le Grimoire') +
+        '<div data-scroll-root style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px">' +
+          (g.sections.length ? sectionsHtml : '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:24px 0">Aucune section pour le moment.</div>') +
+          '<div data-action="add-grimoire-section" style="flex:none;height:44px;border-radius:10px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;' + lockedRowStyle + '">+ Ajouter une section</div>' +
         '</div>' +
         footerHtml +
       '</div>'
@@ -1894,19 +2151,21 @@
     var animDirection = ui.characterCarouselAnimDirection;
     ui.characterCarouselAnimDirection = null;
 
-    var idx = clamp(ui.characterCarouselIndex, 0, CHARACTER_ORDER.length - 1);
+    var order = state.characterOrder;
+    var idx = clamp(ui.characterCarouselIndex, 0, order.length - 1);
     ui.characterCarouselIndex = idx;
-    var charId = CHARACTER_ORDER[idx];
+    var charId = order[idx];
     var character = state.characters[charId];
     var isActive = state.activeCharacterId === charId;
+    var isLegacy = CHARACTER_ORDER.indexOf(charId) !== -1;
 
-    var dotsHtml = CHARACTER_ORDER.map(function (id, i) {
+    var dotsHtml = order.map(function (id, i) {
       return '<div style="width:8px;height:8px;border-radius:50%;background:' + (i === idx ? 'var(--text-gold)' : 'rgba(var(--border-tint),0.35)') + '"></div>';
     }).join('');
 
     var cardHtml =
       '<div id="characterCarouselSwipe" data-scroll-root class="' + (animDirection === 'next' ? 'character-anim-next' : animDirection === 'prev' ? 'character-anim-prev' : '') + '" style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;overflow-y:auto;padding:8px 0;touch-action:pan-y;user-select:none">' +
-        '<img src="' + escapeHtml(character.portrait) + '" alt="' + escapeHtml(character.name) + '" draggable="false" style="width:180px;height:180px;object-fit:cover;border-radius:16px;border:1px solid rgba(var(--border-tint),0.3);box-shadow:0 4px 18px rgba(0,0,0,0.25);pointer-events:none"/>' +
+        renderCharacterAvatar(character, 180, 'border-radius:16px;box-shadow:0 4px 18px rgba(0,0,0,0.25);pointer-events:none') +
         '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center">' +
           '<div style="font-size:20px;font-weight:700;letter-spacing:0.3px" class="font-cinzel">' + escapeHtml(character.name) + '</div>' +
           '<div style="font-size:13px;color:var(--text-muted)">' + escapeHtml(character.subtitle) + (typeof character.level === 'number' ? ' · Niveau ' + character.level : '') + '</div>' +
@@ -1918,22 +2177,37 @@
       '<div style="display:flex;align-items:center;justify-content:space-between;flex:none">' +
         '<div data-action="character-carousel-step" data-delta="-1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);' + (idx === 0 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
         '<div style="display:flex;gap:6px">' + dotsHtml + '</div>' +
-        '<div data-action="character-carousel-step" data-delta="1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);transform:scaleX(-1);' + (idx === CHARACTER_ORDER.length - 1 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
+        '<div data-action="character-carousel-step" data-delta="1" style="flex:none;width:80px;height:76px;border-radius:6px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.24);display:flex;align-items:center;justify-content:center;color:var(--text-main);transform:scaleX(-1);' + (idx === order.length - 1 ? 'opacity:0.35;pointer-events:none;' : 'cursor:pointer;') + '">' + iconArrowLeft(36) + '</div>' +
       '</div>';
 
     var fbDisabledStyle = ui.fbBusy ? 'opacity:0.5;pointer-events:none;' : 'cursor:pointer;';
     var fbButtonBaseStyle = 'flex:none;height:48px;border-radius:10px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;';
+
+    // "Activer ce personnage" : bascule locale instantanée (pas de réseau, pas de confirmation
+    // destructive) — distincte de "Charger ce personnage" (Firebase) qui récupère une sauvegarde
+    // distante et écrase la progression locale. Sans ça, un personnage tout juste créé (jamais
+    // synchronisé sur Firebase) ne serait jouable nulle part.
+    var activateButtonHtml = !isActive
+      ? '<div data-action="activate-character" data-id="' + charId + '" style="' + fbButtonBaseStyle + 'background:var(--bg-card);color:var(--text-main);cursor:pointer;" class="font-cinzel">Activer ce personnage</div>'
+      : '';
+
     var fbButtonsHtml =
       '<div style="display:flex;flex-direction:column;gap:8px;flex:none">' +
+        activateButtonHtml +
         '<div data-action="fb-load-character" data-id="' + charId + '" style="' + fbButtonBaseStyle + fbDisabledStyle + '" class="font-cinzel">Charger ce personnage</div>' +
         (isActive ?
           '<div data-action="fb-save-character" style="' + fbButtonBaseStyle + fbDisabledStyle + '" class="font-cinzel">Sauvegarder ce personnage</div>'
+          : '') +
+        (!isLegacy ?
+          '<div data-action="open-delete-character" data-id="' + charId + '" style="flex:none;height:48px;border-radius:10px;background:transparent;border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Supprimer ce personnage</div>'
           : '') +
       '</div>';
 
     var fbStatusHtml = ui.fbBusy
       ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--text-muted)">Synchronisation avec Firebase…</div>'
       : (ui.fbError ? '<div style="flex:none;text-align:center;font-size:11.5px;color:var(--accent-red-text)">' + escapeHtml(ui.fbError) + '</div>' : '');
+
+    var createButtonHtml = '<div data-action="open-create-character" style="flex:none;height:44px;border-radius:10px;background:var(--bg-card);border:1px dashed rgba(var(--border-tint),0.4);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">+ Créer un personnage</div>';
 
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
@@ -1942,6 +2216,7 @@
         fbButtonsHtml +
         fbStatusHtml +
         navArrowsHtml +
+        createButtonHtml +
       '</div>'
     );
   }
@@ -2090,6 +2365,36 @@
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<div data-action="cancel-fb-confirm" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
           '<div data-action="confirm-fb-action" style="flex:1;height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">' + confirmLabel + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderCreateCharacterModal() {
+    var name = ui.createCharacterModal.name;
+    return '<div id="createCharacterOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+      '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="font-size:17px;font-weight:700;color:var(--text-gold)" class="font-cinzel">Créer un personnage</div>' +
+        '<input id="createCharacterNameInput" type="text" value="' + escapeHtml(name) + '" placeholder="Nom du personnage" maxlength="40" style="height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:10px;color:var(--text-main);font-size:15px;padding:0 12px;box-sizing:border-box"/>' +
+        '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.4">Personnage vierge (fiche à zéro, grimoire vide) ajouté à la liste ci-dessous. Tout se règle ensuite dans Paramètres.</div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<div data-action="cancel-create-character" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-create-character" style="flex:1;height:44px;border-radius:6px;background:var(--border-strong);border:1px solid rgba(var(--border-tint),0.34);color:var(--ink-bright);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Créer</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderDeleteCharacterModal() {
+    var charId = ui.deleteCharacterConfirm.charId;
+    var charName = state.characters[charId].name;
+    return '<div id="deleteCharacterOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+      '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="font-size:17px;font-weight:700;color:#ef4444" class="font-cinzel">Supprimer ce personnage</div>' +
+        '<div style="font-size:13px;color:var(--text-desc);line-height:1.4">Ceci supprime définitivement ' + escapeHtml(charName) + ' de cet appareil (fiche, grimoire). Aucune confirmation possible après coup. Continuer ?</div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<div data-action="cancel-delete-character" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-delete-character" style="flex:1;height:44px;border-radius:6px;background:rgba(239,68,68,0.85);border:1px solid rgba(239,68,68,0.4);color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Supprimer</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -2293,6 +2598,56 @@
       });
     });
 
+    app.querySelectorAll('[data-action="grimoire-section-title"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var section = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)];
+        if (section) section.title = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-section-level-tag"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var section = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)];
+        if (section) section.levelTag = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-section-level"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var section = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)];
+        if (section) section.level = el.value === 'classe' ? 'classe' : clamp(toInt(el.value, 0), 0, 9);
+        render();
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-name"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.name = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-type"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.type = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-range"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.range = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-desc"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.desc = el.value;
+      });
+    });
+    app.querySelectorAll('[data-action="grimoire-spell-note"]').forEach(function (el) {
+      el.addEventListener('input', function () {
+        var spell = settingsGrimoireData().sections[parseInt(el.getAttribute('data-section-index'), 10)].spells[parseInt(el.getAttribute('data-spell-index'), 10)];
+        if (spell) spell.note = el.value;
+      });
+    });
+
     var statsSearchInput = document.getElementById('statsSearchInput');
     if (statsSearchInput) {
       if (focusedSearchId === 'statsSearchInput') {
@@ -2414,6 +2769,16 @@
       });
     });
 
+    var createCharacterNameInput = document.getElementById('createCharacterNameInput');
+    if (createCharacterNameInput) {
+      createCharacterNameInput.focus();
+      createCharacterNameInput.select();
+      createCharacterNameInput.addEventListener('input', function () {
+        ui.createCharacterModal.name = createCharacterNameInput.value;
+      });
+      createCharacterNameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') confirmCreateCharacter(); });
+    }
+
     var goldInput = document.getElementById('goldInput');
     if (goldInput) {
       goldInput.addEventListener('change', function () {
@@ -2454,8 +2819,8 @@
           characterCarouselSwipe.setPointerCapture(e.pointerId);
           characterCarouselSwipe.style.transition = 'none';
         }
-        var idxNow = clamp(ui.characterCarouselIndex, 0, CHARACTER_ORDER.length - 1);
-        var blocked = (dx > 0 && idxNow === 0) || (dx < 0 && idxNow === CHARACTER_ORDER.length - 1);
+        var idxNow = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
+        var blocked = (dx > 0 && idxNow === 0) || (dx < 0 && idxNow === state.characterOrder.length - 1);
         var followDx = blocked ? dx * 0.35 : dx;
         charDrag.dx = followDx;
         var rotate = clamp(followDx / 18, -8, 8);
@@ -2470,8 +2835,8 @@
         charDrag = null;
         if (!wasDragging) return;
 
-        var idxNow = clamp(ui.characterCarouselIndex, 0, CHARACTER_ORDER.length - 1);
-        var canPrev = idxNow > 0, canNext = idxNow < CHARACTER_ORDER.length - 1;
+        var idxNow = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
+        var canPrev = idxNow > 0, canNext = idxNow < state.characterOrder.length - 1;
         var threshold = 90;
         var commitDelta = 0;
         if (dx <= -threshold && canNext) commitDelta = 1;
@@ -2495,8 +2860,20 @@
     }
   }
 
+  function confirmCreateCharacter() {
+    if (!ui.createCharacterModal) return;
+    var newCharName = (ui.createCharacterModal.name || '').trim() || 'Nouveau personnage';
+    var newCharId = generateCharacterId();
+    state.characters[newCharId] = makeCharacter(newCharId, newCharName, '', null, null, 'calix');
+    state.characterOrder.push(newCharId);
+    ui.characterCarouselIndex = state.characterOrder.length - 1;
+    ui.createCharacterModal = null;
+    saveState();
+    render();
+  }
+
   function characterCarouselStep(delta) {
-    var newIdx = clamp(ui.characterCarouselIndex + delta, 0, CHARACTER_ORDER.length - 1);
+    var newIdx = clamp(ui.characterCarouselIndex + delta, 0, state.characterOrder.length - 1);
     if (newIdx === ui.characterCarouselIndex) return;
     ui.characterCarouselAnimDirection = delta > 0 ? 'next' : 'prev';
     ui.characterCarouselIndex = newIdx;
@@ -2514,6 +2891,11 @@
           ui.settingsCharacterDraft = null;
           ui.settingsLevelError = '';
           ui.disableLevelDialog = null;
+        }
+        if (ui.view === 'settings-grimoire' && ui.settingsGrimoireEditing) {
+          ui.settingsGrimoireEditing = false;
+          ui.settingsGrimoireDraft = null;
+          ui.grimoireSpellEdit = null;
         }
         ui.view = e.currentTarget.getAttribute('data-view');
         if (ui.view === 'settings' && ui.githubDeployInfo.status === 'idle') {
@@ -2592,6 +2974,125 @@
         ui.disableLevelDialog = null;
         saveState();
         render();
+        break;
+
+      case 'start-edit-grimoire':
+        ui.settingsGrimoireEditing = true;
+        ui.settingsGrimoireDraft = sanitizeGrimoire(cloneDeep(characterGrimoire(state.activeCharacterId)));
+        ui.settingsGrimoireCollapsed = {};
+        render();
+        break;
+      case 'cancel-edit-grimoire':
+        ui.settingsGrimoireEditing = false;
+        ui.settingsGrimoireDraft = null;
+        ui.grimoireSpellEdit = null;
+        render();
+        break;
+      case 'confirm-edit-grimoire':
+        sanitizeGrimoire(ui.settingsGrimoireDraft);
+        state.characters[state.activeCharacterId].grimoire = ui.settingsGrimoireDraft;
+        ui.settingsGrimoireEditing = false;
+        ui.settingsGrimoireDraft = null;
+        ui.grimoireSpellEdit = null;
+        saveState();
+        render();
+        break;
+
+      case 'add-grimoire-section': {
+        var newSectionSections = settingsGrimoireData().sections;
+        newSectionSections.push(makeGrimoireSection());
+        // Une section fraîchement créée démarre dépliée (contrairement au défaut replié) pour que
+        // l'utilisateur puisse la remplir tout de suite sans devoir d'abord la dérouler.
+        ui.settingsGrimoireCollapsed[newSectionSections.length - 1] = false;
+        render();
+        break;
+      }
+      case 'remove-grimoire-section': {
+        var removeSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        settingsGrimoireData().sections.splice(removeSectionIdx, 1);
+        render();
+        break;
+      }
+      case 'move-grimoire-section-up': {
+        var upSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var upSections = settingsGrimoireData().sections;
+        if (upSectionIdx > 0) {
+          var upSection = upSections.splice(upSectionIdx, 1)[0];
+          upSections.splice(upSectionIdx - 1, 0, upSection);
+          render();
+        }
+        break;
+      }
+      case 'move-grimoire-section-down': {
+        var downSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var downSections = settingsGrimoireData().sections;
+        if (downSectionIdx < downSections.length - 1) {
+          var downSection = downSections.splice(downSectionIdx, 1)[0];
+          downSections.splice(downSectionIdx + 1, 0, downSection);
+          render();
+        }
+        break;
+      }
+      case 'toggle-grimoire-section-collapse': {
+        var collapseIdx = e.currentTarget.getAttribute('data-section-index');
+        // Une simple négation ne suffit pas : le défaut est désormais "repliée" (undefined ET true
+        // signifient toutes deux repliée), donc il faut explicitement basculer entre les deux états
+        // réels plutôt que nier une valeur qui vaut déjà true par défaut.
+        var wasCollapsed = ui.settingsGrimoireCollapsed[collapseIdx] !== false;
+        ui.settingsGrimoireCollapsed[collapseIdx] = wasCollapsed ? false : true;
+        render();
+        break;
+      }
+      case 'add-grimoire-spell': {
+        var addSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var addSpellSpells = settingsGrimoireData().sections[addSpellSectionIdx].spells;
+        addSpellSpells.push(makeGrimoireSpell());
+        // Ouvre directement la popup d'édition du sort tout juste créé — sinon il n'apparaîtrait
+        // que comme une ligne compacte "Nouveau sort" sans invite claire à la compléter.
+        ui.grimoireSpellEdit = { sectionIndex: addSpellSectionIdx, spellIndex: addSpellSpells.length - 1, leaving: false };
+        ui.grimoireSpellEditEnterPending = true;
+        render();
+        break;
+      }
+      case 'remove-grimoire-spell': {
+        var rmSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var rmSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        settingsGrimoireData().sections[rmSpellSectionIdx].spells.splice(rmSpellIdx, 1);
+        render();
+        break;
+      }
+      case 'move-grimoire-spell-up': {
+        var upSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var upSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        var upSpells = settingsGrimoireData().sections[upSpellSectionIdx].spells;
+        if (upSpellIdx > 0) {
+          var upSpell = upSpells.splice(upSpellIdx, 1)[0];
+          upSpells.splice(upSpellIdx - 1, 0, upSpell);
+          render();
+        }
+        break;
+      }
+      case 'move-grimoire-spell-down': {
+        var downSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var downSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        var downSpells = settingsGrimoireData().sections[downSpellSectionIdx].spells;
+        if (downSpellIdx < downSpells.length - 1) {
+          var downSpell = downSpells.splice(downSpellIdx, 1)[0];
+          downSpells.splice(downSpellIdx + 1, 0, downSpell);
+          render();
+        }
+        break;
+      }
+      case 'open-grimoire-spell-edit': {
+        var openSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var openSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        ui.grimoireSpellEdit = { sectionIndex: openSpellSectionIdx, spellIndex: openSpellIdx, leaving: false };
+        ui.grimoireSpellEditEnterPending = true;
+        render();
+        break;
+      }
+      case 'close-grimoire-spell-edit':
+        startLeavingGrimoireSpellEdit();
         break;
 
       case 'add-class-resource': {
@@ -2925,6 +3426,66 @@
         break;
       }
 
+      // Bascule locale instantanée du personnage actif (voir commentaire sur activateButtonHtml
+      // dans renderSettingsLoadCharacter()) — aucune confirmation nécessaire : chaque mutation de
+      // jeu est déjà persistée au fil de l'eau (saveState() immédiat), il n'y a donc rien à perdre
+      // en changeant de personnage actif.
+      case 'activate-character': {
+        var activateId = e.currentTarget.getAttribute('data-id');
+        var activateChar = state.characters[activateId];
+        if (!activateChar) break;
+        state.activeCharacterId = activateId;
+        state.profiles[state.activeProfileIndex] = cloneDeep(activateChar.savedProfile);
+        applyTheme();
+        saveState();
+        ui.view = 'tracker';
+        render();
+        break;
+      }
+
+      case 'open-create-character':
+        ui.createCharacterModal = { name: '' };
+        render();
+        break;
+      case 'cancel-create-character':
+        ui.createCharacterModal = null;
+        render();
+        break;
+      case 'confirm-create-character':
+        confirmCreateCharacter();
+        break;
+
+      case 'open-delete-character': {
+        var openDeleteId = e.currentTarget.getAttribute('data-id');
+        // Filet de sécurité : Calix/Deneor n'ont pas de bouton de suppression dans le rendu, mais
+        // on protège aussi l'action elle-même si jamais elle était déclenchée autrement.
+        if (CHARACTER_ORDER.indexOf(openDeleteId) !== -1) break;
+        ui.deleteCharacterConfirm = { charId: openDeleteId };
+        render();
+        break;
+      }
+      case 'cancel-delete-character':
+        ui.deleteCharacterConfirm = null;
+        render();
+        break;
+      case 'confirm-delete-character': {
+        var deleteId = ui.deleteCharacterConfirm ? ui.deleteCharacterConfirm.charId : null;
+        ui.deleteCharacterConfirm = null;
+        if (!deleteId || CHARACTER_ORDER.indexOf(deleteId) !== -1 || !state.characters[deleteId]) { render(); break; }
+        delete state.characters[deleteId];
+        var deleteIdx = state.characterOrder.indexOf(deleteId);
+        if (deleteIdx !== -1) state.characterOrder.splice(deleteIdx, 1);
+        if (state.activeCharacterId === deleteId) {
+          state.activeCharacterId = state.characterOrder.indexOf('calix') !== -1 ? 'calix' : state.characterOrder[0];
+          state.profiles[state.activeProfileIndex] = cloneDeep(state.characters[state.activeCharacterId].savedProfile);
+          applyTheme();
+        }
+        ui.characterCarouselIndex = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
+        saveState();
+        render();
+        break;
+      }
+
       default: break;
     }
   }
@@ -3055,6 +3616,20 @@
     }, SPELL_DETAIL_LEAVE_MS);
   }
 
+  // ---- popup d'édition d'un sort dans "Paramétrer le Grimoire" ----
+  var grimoireSpellEditRemoveTimer = null;
+
+  function startLeavingGrimoireSpellEdit() {
+    if (!ui.grimoireSpellEdit || ui.grimoireSpellEdit.leaving) return;
+    ui.grimoireSpellEdit.leaving = true;
+    render();
+    clearTimeout(grimoireSpellEditRemoveTimer);
+    grimoireSpellEditRemoveTimer = setTimeout(function () {
+      ui.grimoireSpellEdit = null;
+      render();
+    }, SPELL_DETAIL_LEAVE_MS); // même animation CSS que la popup de détail en lecture
+  }
+
   // ---- actions Charger/Sauvegarder (Firebase), déclenchées après confirmation ----
   function performFbLoad(charId) {
     ui.fbBusy = true; ui.fbError = null; render();
@@ -3087,13 +3662,16 @@
     ui.fbBusy = true; ui.fbError = null; render();
     var charId = state.activeCharacterId;
     var fbSaveProfile = cloneDeep(profile());
-    // Le grimoire n'est pas éditable depuis l'app : on réécrit uniquement le profil, en
-    // conservant tel quel le grimoire déjà présent dans bdd.json (posé par l'admin) plutôt
-    // que de l'écraser avec rien.
+    // Le grimoire local (state.characters[charId].grimoire, éditable depuis "Paramétrer le Grimoire"
+    // depuis août 2026) prime sur celui déjà présent sur Firebase : sinon, éditer son grimoire en
+    // jeu puis "Sauvegarder ce personnage" écraserait silencieusement cette édition locale avec la
+    // version distante plus ancienne. On ne retombe sur le grimoire Firebase existant que si ce
+    // personnage n'a encore jamais été édité localement (grimoire local absent).
+    var fbSaveGrimoire = state.characters[charId].grimoire;
     fbSaveBdd(function (bdd) {
       var existingEntry = (bdd[charId] && typeof bdd[charId] === 'object') ? bdd[charId] : {};
-      var existingGrimoire = (existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : (state.characters[charId].grimoire || null);
-      bdd[charId] = { profile: fbSaveProfile, grimoire: existingGrimoire };
+      var existingGrimoire = (existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : null;
+      bdd[charId] = { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire };
       return bdd;
     }).then(function () {
       state.characters[charId].savedProfile = cloneDeep(fbSaveProfile);
