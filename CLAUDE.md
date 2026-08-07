@@ -624,6 +624,10 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
         ".read": "auth.uid === '<UID admin>'",
         ".write": "auth.uid === '<UID admin>'"
       },
+      "approvedUserInfo": {
+        ".read": "auth.uid === '<UID admin>'",
+        ".write": "auth.uid === '<UID admin>'"
+      },
       "accessRequests": {
         ".read": "auth.uid === '<UID admin>'",
         "$uid": { ".write": "auth != null && auth.uid === $uid" }
@@ -632,9 +636,9 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   }
   ```
   Seul l'UID admin (l'utilisateur, codé en dur dans les règles côté Firebase Console — **pas**
-  dans le JS client) peut lire/écrire `approvedUsers` et lire `accessRequests` ; n'importe quel
-  utilisateur connecté peut écrire **sa propre** entrée sous `accessRequests/{son uid}` (mais pas
-  la lire), ce qui alimente le flux de demande d'accès ci-dessous.
+  dans le JS client) peut lire/écrire `approvedUsers`/`approvedUserInfo` et lire `accessRequests` ;
+  n'importe quel utilisateur connecté peut écrire **sa propre** entrée sous `accessRequests/{son
+  uid}` (mais pas la lire), ce qui alimente le flux de demande d'accès ci-dessous.
   **Flux de demande d'accès** (ajouté 2026-08-07, pour éviter d'avoir à copier-coller un UID à la
   main dans la console à chaque nouvel utilisateur) : `fbRequestAccess(user)` (`index.html`) écrit
   `accessRequests/{uid} = { email, name, requestedAt }` à chaque `fbEnsureAuth()` réussi — que
@@ -645,9 +649,18 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   ("Compte connecté mais pas encore approuvé... Une demande d'accès a été envoyée").
   Le panneau **"Accès"** de `cantrip-admin.html` (troisième bouton du topbar, entre "Grimoire" et
   "Charger", `ui.mode = 'acces'`, `renderAccess()`) liste les demandes en attente (bouton
-  **Autoriser** → `approvedUsers/{uid} = true` + suppression de la demande ; **Refuser** →
-  suppression de la demande seule) et les utilisateurs déjà approuvés (bouton **Retirer** →
-  suppression de `approvedUsers/{uid}`, avec confirmation native vu le caractère destructif).
+  **Autoriser** → `approvedUsers/{uid} = true` + copie de `email`/`name` de la demande dans
+  `approvedUserInfo/{uid}` (voir juste en dessous) + suppression de la demande ; **Refuser** →
+  suppression de la demande seule) et les utilisateurs déjà approuvés (email/nom affichés s'ils
+  sont connus, sinon repli sur l'UID seul — cas d'un UID ajouté à la main via la console plutôt que
+  via ce flux, comme le tout premier utilisateur admin ; bouton **Retirer** → suppression de
+  `approvedUsers/{uid}` **et** `approvedUserInfo/{uid}`, avec confirmation native vu le caractère
+  destructif). `approvedUserInfo` existe séparément d'`approvedUsers` car la règle d'accès à
+  `cantrip` teste `approvedUsers/{uid}.val() === true` littéralement — impossible d'y stocker un
+  objet `{ email, name }` sans casser cette règle, d'où un second nœud dédié à l'affichage,
+  peuplé uniquement au moment de l'approbation (la demande source dans `accessRequests` étant
+  supprimée juste après, `approvedUserInfo` est la seule trace persistante de l'email d'un
+  utilisateur approuvé).
   `fbLoadAccessData()`/`fbApproveAccess()`/`fbDenyAccess()`/`fbRevokeAccess()` sont propres à
   `cantrip-admin.html` (pas dans `index.html`, qui ne fait qu'émettre des demandes, jamais les
   gérer).
@@ -687,15 +700,26 @@ Barre du haut en 2 zones (`.topbar`, flex simple `justify-content:space-between`
 CSS Grid, pas de zone centrée) :
 - **Gauche** (`.topbar-left`) : titre + deux boutons de personnage
   (`#btnCharCalix`/`#btnCharDeneor`, `ui.activeChar`) à la place d'un ancien menu déroulant.
-- **Droite** (`.topbar-right`), dans l'ordre : deux boutons de mode (`ui.mode`,
-  `'personnage'` | `'grimoire'`) — **"Personnage"** puis **"Grimoire"** — qui affichent l'un ou
-  l'autre panneau (`#personPanel` / `#phone`) sans jamais montrer les deux à la fois ; puis
-  **"Charger"** / **"Sauvegarder"** (`#btnFbLoad`/`#btnFbSave`, branchés dans `render()` donc
-  disponibles quel que soit le mode affiché). Le panneau "Personnage" reproduit tout ce qui est
-  éditable dans "Paramétrer le Personnage" en jeu (PV, Combat, Attaques, Emplacements de sorts,
-  Ressources de classe, Caractéristiques, Jets de sauvegarde, Compétences, Sorts préparés pour
-  Deneor, Or) ; le panneau "Grimoire" reproduit le rendu du Grimoire de l'app (thème, filtres,
-  onglets de niveau) pour éditer les sorts.
+- **Droite** (`.topbar-right`), dans l'ordre : trois boutons de mode (`ui.mode`,
+  `'personnage'` | `'grimoire'` | `'acces'`) — **"Personnage"**, **"Grimoire"** puis **"Accès"**
+  (ajouté 2026-08-07, voir section Synchronisation cloud plus bas pour le détail du panneau) — qui
+  affichent chacun leur panneau (`#personPanel` / `#phone` / `#accessPanel`) sans jamais en montrer
+  deux à la fois ; puis **"Charger"** / **"Sauvegarder"** (`#btnFbLoad`/`#btnFbSave`, branchés dans
+  `render()` donc disponibles quel que soit le mode affiché). Le panneau "Personnage" reproduit
+  tout ce qui est éditable dans "Paramétrer le Personnage" en jeu (PV, Combat, Attaques,
+  Emplacements de sorts, Ressources de classe, Caractéristiques, Jets de sauvegarde, Compétences,
+  Sorts préparés pour Deneor, Or) ; le panneau "Grimoire" reproduit le rendu du Grimoire de l'app
+  (thème, filtres, onglets de niveau) pour éditer les sorts.
+
+Responsive mobile (ajouté 2026-08-07) : `@media (max-width: 640px)` fait passer `.topbar-left`/
+`.topbar-right` en pleine largeur (empilés plutôt que côte à côte), réduit les paddings de
+`.layout`/`.phone`/`.person-panel`/`.modal`, agrandit légèrement les boutons (`min-height:40px`,
+cible tactile) et fait passer `.field-row` en wrap. `.layout` (flex + `flex-wrap:wrap`) et les
+largeurs `480px`/`320px` avec `max-width:100%` sur `.phone`/`.person-panel`/`.side-panel`
+suffisaient déjà à éviter tout débordement horizontal avant cet ajout — le correctif porte donc
+sur l'usage de l'espace et la taille des cibles tactiles, pas sur un bug de mise en page cassée.
+`.phone`/`.person-panel` reproduisent de toute façon le rendu mobile-first de l'app elle-même
+(même `.pgrid3` à 3 colonnes que le Tracker), donc déjà lisibles à 375px de large sans changement.
 
 **Synchronisation Firebase (Realtime Database, nœud `cantrip`)** — "Charger" (`fbLoadPersonnage()`)
 / "Sauvegarder" (`fbSavePersonnage()`) sont les **mêmes fonctions que dans `index.html`, dupliquées**

@@ -218,6 +218,19 @@
 
   .sync-footer{max-width:1200px;margin:0 auto;padding:2px 26px 22px;display:flex;gap:8px 22px;flex-wrap:wrap;justify-content:center;font-size:12px;color:var(--text-dim);}
   .sync-footer .refresh-link{cursor:pointer;text-decoration:underline;color:var(--text-muted);}
+
+  @media (max-width: 640px) {
+    .topbar{padding:12px 14px;gap:10px;}
+    .topbar-left, .topbar-right{width:100%;justify-content:center;}
+    .topbar h1{width:100%;text-align:center;font-size:17px;}
+    .btn{padding:11px 14px;min-height:40px;}
+    .layout{padding:14px;gap:16px;}
+    .phone, .person-panel{border-width:3px;padding:16px 12px 14px;min-height:0;}
+    .side-panel{width:100%;max-width:480px;padding:16px;}
+    .modal{padding:16px;}
+    .field-row{flex-wrap:wrap;}
+    .field-row .field{flex:1 1 140px;}
+  }
 </style>
 </head>
 <body>
@@ -1561,16 +1574,21 @@ function fbLoadAccessData() {
   return fbEnsureAuth().then(function () {
     return Promise.all([
       fbDb.ref('accessRequests').once('value'),
-      fbDb.ref('approvedUsers').once('value')
+      fbDb.ref('approvedUsers').once('value'),
+      fbDb.ref('approvedUserInfo').once('value')
     ]);
   }).then(function (results) {
     var requestsVal = results[0].val() || {};
     var approvedVal = results[1].val() || {};
+    var infoVal = results[2].val() || {};
     ui.accessRequests = Object.keys(requestsVal).map(function (uid) {
       var r = requestsVal[uid] || {};
       return { uid: uid, email: r.email || '', name: r.name || '', requestedAt: r.requestedAt || 0 };
     }).sort(function (a, b) { return b.requestedAt - a.requestedAt; });
-    ui.approvedUsers = Object.keys(approvedVal).filter(function (uid) { return approvedVal[uid] === true; });
+    ui.approvedUsers = Object.keys(approvedVal).filter(function (uid) { return approvedVal[uid] === true; }).map(function (uid) {
+      var info = infoVal[uid] || {};
+      return { uid: uid, email: info.email || '', name: info.name || '' };
+    });
     ui.accessBusy = false;
     render();
   }).catch(function (err) {
@@ -1580,11 +1598,17 @@ function fbLoadAccessData() {
   });
 }
 
+// Copie email/nom de la demande approuvée dans approvedUserInfo : la demande elle-même est
+// supprimée après approbation (accessRequests), donc sans cette copie l'email disparaîtrait de
+// la liste "Utilisateurs approuvés" (approvedUsers ne stocke qu'un booléen, imposé par la règle
+// de lecture/écriture de "cantrip" qui teste ".val() === true").
 function fbApproveAccess(uid) {
   ui.accessBusy = true; ui.accessError = null; render();
+  var req = (ui.accessRequests || []).find(function (r) { return r.uid === uid; }) || {};
   fbEnsureAuth().then(function () {
     return Promise.all([
       fbDb.ref('approvedUsers/' + uid).set(true),
+      fbDb.ref('approvedUserInfo/' + uid).set({ email: req.email || '', name: req.name || '' }),
       fbDb.ref('accessRequests/' + uid).remove()
     ]);
   }).then(function () {
@@ -1613,7 +1637,10 @@ function fbRevokeAccess(uid) {
   if (!confirm("Retirer l'accès de cet utilisateur ? Il ne pourra plus lire ni écrire les personnages tant qu'il n'est pas ré-approuvé.")) return;
   ui.accessBusy = true; ui.accessError = null; render();
   fbEnsureAuth().then(function () {
-    return fbDb.ref('approvedUsers/' + uid).remove();
+    return Promise.all([
+      fbDb.ref('approvedUsers/' + uid).remove(),
+      fbDb.ref('approvedUserInfo/' + uid).remove()
+    ]);
   }).then(function () {
     fbLoadAccessData();
   }).catch(function (err) {
@@ -1642,10 +1669,16 @@ function renderAccess() {
     '</div>';
   }).join('');
 
-  var approvedHtml = (ui.approvedUsers || []).map(function (uid) {
-    return '<div class="prow">' +
-      '<div style="flex:1;font-size:11px;color:var(--text-muted);word-break:break-all;">' + escapeHtml(uid) + '</div>' +
-      '<button class="btn" data-action="access-revoke" data-uid="' + escapeHtml(uid) + '">Retirer</button>' +
+  var approvedHtml = (ui.approvedUsers || []).map(function (u) {
+    return '<div class="prow" style="flex-direction:column;align-items:stretch;gap:4px;">' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;color:var(--text-main);">' + escapeHtml(u.name || u.email || u.uid) + '</div>' +
+          (u.email ? '<div style="font-size:11px;color:var(--text-muted);">' + escapeHtml(u.email) + '</div>' : '') +
+        '</div>' +
+        '<button class="btn" data-action="access-revoke" data-uid="' + escapeHtml(u.uid) + '">Retirer</button>' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);word-break:break-all;">' + escapeHtml(u.uid) + '</div>' +
     '</div>';
   }).join('');
 
