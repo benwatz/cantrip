@@ -427,12 +427,23 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
 ## Personnages (Calix / Deneor + personnages créés dynamiquement)
 
 `state.characters` est un objet `{ [id]: {...} }`, chaque entrée `{ id, name, subtitle, level,
-portrait, theme, savedProfile, grimoire }` où `savedProfile` est un instantané complet d'un profil
-(même forme que `defaultProfile()`) et `theme` (`'calix'` | `'deneor'`) est le thème visuel associé
-à ce personnage (voir section Thèmes (Calix / Deneor) plus bas). `state.activeCharacterId` indique
-lequel est actuellement **chargé**. `state.characterOrder` (tableau d'ids, persisté, ajouté en août
-2026) fixe l'ordre d'affichage dans le carrousel — c'est lui qui pilote toute la navigation
-(`character-carousel-step`, glissé, pastilles), **pas** `CHARACTER_ORDER`.
+portrait, theme, savedProfile, grimoire, savedAt }` où `savedProfile` est un instantané complet
+d'un profil (même forme que `defaultProfile()`) et `theme` (`'calix'` | `'deneor'`) est le thème
+visuel historiquement associé à ce personnage (voir section Thèmes plus bas — ne pilote plus
+l'affichage depuis août 2026, conservé uniquement comme valeur de repli pour la migration de
+`state.themePreference`). `savedAt` (`null` | timestamp `Date.now()`, ajouté août 2026) est la date
+de la dernière sauvegarde Firebase **réussie** de ce personnage précis — écrit par `performFbSave()`
+(nouveau timestamp) et rapatrié par `performFbLoad()` (celui de l'entrée distante chargée,
+`entry.savedAt`, ou `null` si l'entrée Firebase est antérieure à ce champ) ; `null` tant qu'aucune
+des deux actions n'a jamais réussi pour ce personnage. Affiché sous le sous-titre/niveau dans
+"Charger un personnage" (`renderSettingsLoadCharacter()`, réutilise `formatDeployDate()`) : "Dernière
+sauvegarde : JJ/MM/AAAA à HH:MM", ou "Jamais sauvegardé" si `null`. `cantrip-admin.html` pose aussi
+ce champ dans `fbSavePersonnage()` (même écriture Firebase que l'app, pour que la date reste exacte
+quel que soit l'outil qui a fait la dernière sauvegarde) mais ne l'affiche pas lui-même (pas
+demandé). `state.activeCharacterId` indique lequel est actuellement **chargé**. `state.characterOrder`
+(tableau d'ids, persisté, ajouté en août 2026) fixe l'ordre d'affichage dans le carrousel — c'est
+lui qui pilote toute la navigation (`character-carousel-step`, glissé, pastilles), **pas**
+`CHARACTER_ORDER`.
 
 `CHARACTER_ORDER = ['calix', 'deneor']` reste dans le code mais a changé de rôle : ce n'est plus
 l'ordre d'affichage (remplacé par `state.characterOrder`), c'est désormais la liste des **deux

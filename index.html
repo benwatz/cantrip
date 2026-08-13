@@ -569,7 +569,9 @@
     p.characterName = name;
     // grimoire : null par défaut (utilise SPELLBOOK/DENEOR_SPELLBOOK codé en dur), rempli
     // uniquement par un "Charger ce personnage" qui a trouvé un grimoire sur Firebase.
-    return { id: id, name: name, subtitle: subtitle, level: level, portrait: portrait, theme: theme, savedProfile: p, grimoire: null };
+    // savedAt : null tant qu'aucun "Sauvegarder ce personnage" (ou "Charger", qui rapatrie la
+    // date de la dernière sauvegarde distante) n'a eu lieu — voir performFbSave()/performFbLoad().
+    return { id: id, name: name, subtitle: subtitle, level: level, portrait: portrait, theme: theme, savedProfile: p, grimoire: null, savedAt: null };
   }
 
   function defaultCharacters() {
@@ -625,6 +627,7 @@
           else sanitizeProfile(c.savedProfile);
           if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
           else sanitizeGrimoire(c.grimoire);
+          if (typeof c.savedAt !== 'number') c.savedAt = null;
         });
         // Personnages créés dynamiquement (CRUD local, août 2026) : mêmes garanties de forme que
         // Calix/Deneor sur savedProfile/grimoire, mais sans resynchronisation de l'identité — elle
@@ -643,6 +646,7 @@
           sanitizeProfile(c.savedProfile);
           if (!c.grimoire || typeof c.grimoire !== 'object' || !Array.isArray(c.grimoire.sections)) c.grimoire = null;
           else sanitizeGrimoire(c.grimoire);
+          if (typeof c.savedAt !== 'number') c.savedAt = null;
         });
       }
 
@@ -2237,6 +2241,7 @@
         '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center">' +
           '<div style="font-size:20px;font-weight:700;letter-spacing:0.3px" class="font-cinzel">' + escapeHtml(character.name) + '</div>' +
           '<div style="font-size:13px;color:var(--text-muted)">' + escapeHtml(character.subtitle) + (typeof character.level === 'number' ? ' · Niveau ' + character.level : '') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-dim)">' + (typeof character.savedAt === 'number' ? 'Dernière sauvegarde : ' + formatDeployDate(character.savedAt) : 'Jamais sauvegardé') + '</div>' +
           (isActive ? '<div style="margin-top:4px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-gold);background:rgba(var(--border-tint),0.18);border:1px solid rgba(var(--border-tint),0.4);padding:3px 10px;border-radius:10px">Personnage chargé</div>' : '') +
         '</div>' +
       '</div>';
@@ -3763,6 +3768,11 @@
       sanitizeProfile(loadedProfile);
       state.characters[charId].savedProfile = loadedProfile;
       state.characters[charId].grimoire = loadedGrimoire;
+      // Rapatrie la date de la dernière sauvegarde distante (absente sur une entrée antérieure à
+      // cette fonctionnalité, ou écrite par cantrip-admin.html avant qu'il ne pose ce champ à son
+      // tour) plutôt que de fabriquer un "maintenant" qui suggérerait à tort une sauvegarde toute
+      // fraîche.
+      state.characters[charId].savedAt = typeof entry.savedAt === 'number' ? entry.savedAt : null;
       state.profiles[state.activeProfileIndex] = cloneDeep(loadedProfile);
       state.activeCharacterId = charId;
       saveState();
@@ -3787,6 +3797,7 @@
     // version distante plus ancienne. On ne retombe sur le grimoire Firebase existant que si ce
     // personnage n'a encore jamais été édité localement (grimoire local absent).
     var fbSaveGrimoire = state.characters[charId].grimoire;
+    var fbSaveAt = Date.now();
     // Lecture best-effort : un personnage jamais encore sauvegardé sur Firebase n'a pas encore de
     // characterAccess pour cet utilisateur, donc cette lecture peut légitimement échouer en
     // PERMISSION_DENIED même si le personnage n'existe simplement pas encore (RTDB ne distingue
@@ -3797,11 +3808,12 @@
     fbLoadCharacterEntry(charId).catch(function () { return null; }).then(function (existingEntry) {
       var wasExisting = existingEntry && typeof existingEntry === 'object';
       var existingGrimoire = (wasExisting && existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : null;
-      return fbSaveCharacterEntry(charId, { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire }).then(function () {
+      return fbSaveCharacterEntry(charId, { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire, savedAt: fbSaveAt }).then(function () {
         if (!wasExisting) return fbClaimOwnership(charId);
       });
     }).then(function () {
       state.characters[charId].savedProfile = cloneDeep(fbSaveProfile);
+      state.characters[charId].savedAt = fbSaveAt;
       saveState();
       ui.fbBusy = false;
       showFbToast('Le personnage a été sauvegardé avec succès.');

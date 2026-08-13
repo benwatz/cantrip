@@ -2244,7 +2244,7 @@ function fbLoadPersonnage() {
 function fbSavePersonnage() {
   var charId = ui.activeChar;
   if (!confirm('Sauvegarder "' + characterLabel(charId) + '" ?')) return;
-  var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) } };
+  var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) }, savedAt: Date.now() };
   showToast('Sauvegarde sur Firebase...');
   fbSaveCharacterEntry(charId, payload).then(function () {
     showToast('Le personnage a été sauvegardé avec succès.', 'success');
