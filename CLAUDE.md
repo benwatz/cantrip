@@ -571,19 +571,30 @@ révisé"). En cas de divergence, les arbitrages suivants ont été retenus :
 
 ## Thèmes (Calix / Deneor = Clair / Sombre)
 
-**Toggle manuel réintroduit en août 2026** (revient sur l'ancienne décision "plus de toggle
+**Choix manuel réintroduit en août 2026** (revient sur l'ancienne décision "plus de toggle
 clair/sombre manuel, le thème suit le personnage") : le thème visuel est désormais une préférence
 globale de l'appareil, indépendante du personnage actif — `state.themePreference` (`null` tant que
 non résolu, puis `'calix'` | `'deneor'`, réutilise les mêmes noms de valeurs que l'ancien
-`character.theme` pour rester cohérent avec `THEME_COLOR_META`/le CSS), choisie depuis un toggle
-"Clair"/"Sombre" (`renderThemeToggle()`, en tête de `renderSettings()`, `data-action="set-theme"`)
-et persistée via `saveState()` comme le reste de `state`. `activeTheme()` lit directement
-`state.themePreference` (repli sur `'calix'` tant que `null`/invalide) ; `applyTheme()` (inchangée) pose
-cette valeur sur l'attribut `data-theme` de `<html>` et met à jour le `<meta name="theme-color">`
-via la table `THEME_COLOR_META`. Charger/activer/sauvegarder un personnage ne touche plus au thème
-(les appels `applyTheme()` qui suivaient `activate-character`, la suppression d'un personnage actif
-et `performFbLoad()` ont été retirés) — seul le toggle de Paramètres et le calcul de démarrage
-ci-dessous changent `state.themePreference`.
+`character.theme` pour rester cohérent avec `THEME_COLOR_META`/le CSS), choisie depuis une entrée
+de menu **"Thème"** en tête de `renderSettings()` (même gabarit que les autres lignes du menu
+Paramètres — libellé à gauche, valeur courante ("Clair"/"Sombre", `themeLabel()`) puis chevron à
+droite — plutôt que directement affichée en toggle sur la page, pour ne pas alourdir l'écran
+principal ; `data-action="open-theme-menu"`, `ui.themeMenuOpen` booléen éphémère). Le tap ouvre
+`renderThemeMenuModal()`, une modale au même gabarit que `renderDeleteCharacterModal()` (fond
+sombre + carte centrée) listant les deux options en lignes sélectionnables (coche `iconCheck()`
+sur l'option active) ; taper une option (`data-action="set-theme"`) l'applique **et** referme la
+modale immédiatement (pas de bouton "Valider" séparé — même esprit que les favoris du Grimoire,
+choix instantané), taper le fond (`data-action="close-theme-menu"` posé sur l'overlay) referme sans
+rien changer. Le clic sur une option appelle `e.stopPropagation()` (même pattern que l'étoile de
+favori du Grimoire) pour ne pas aussi déclencher la fermeture du fond, qui porte son propre
+`data-action` sur le même conteneur.
+`saveState()` persiste `state.themePreference` comme le reste de `state`. `activeTheme()` lit
+directement `state.themePreference` (repli sur `'calix'` tant que `null`/invalide) ; `applyTheme()`
+(inchangée) pose cette valeur sur l'attribut `data-theme` de `<html>` et met à jour le
+`<meta name="theme-color">` via la table `THEME_COLOR_META`. Charger/activer/sauvegarder un
+personnage ne touche plus au thème (les appels `applyTheme()` qui suivaient `activate-character`,
+la suppression d'un personnage actif et `performFbLoad()` ont été retirés) — seule cette entrée de
+menu et le calcul de démarrage ci-dessous changent `state.themePreference`.
 - **Thème Calix / "Clair"** (`:root`, valeurs par défaut sans attribut) — ocre/parchemin clair,
   hérité de l'ancien thème clair unique (pas blanc, pour garder l'aspect médiéval).
 - **Thème Deneor / "Sombre"** (`:root[data-theme="deneor"]`) — palette sombre vert forêt construite

@@ -889,6 +889,7 @@
     fbConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Firebase est ouverte
     createCharacterModal: null, // { name: string } quand la modale "Créer un personnage" est ouverte
     deleteCharacterConfirm: null, // { charId } quand la confirmation de suppression est ouverte (jamais pour calix/deneor)
+    themeMenuOpen: false, // true quand la modale de choix du thème (Clair/Sombre) est ouverte
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
     codexPreviewEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
@@ -973,6 +974,10 @@
   }
   function iconClose() {
     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>';
+  }
+  function iconCheck(size) {
+    var s = size || 18;
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
   }
   function iconSword() {
     return '<svg width="16" height="16" viewBox="0 0 513 513" fill="currentColor"><path fill-rule="evenodd" d="M19.00,416.63 C19.00,372.90 19.36,336.89 19.81,336.62 C20.26,336.34 56.45,327.78 100.24,317.59 C144.03,307.41 181.00,298.79 182.38,298.44 C184.68,297.86 185.44,298.62 190.86,306.87 C203.07,325.46 213.53,350.61 223.52,385.35 C228.33,402.08 229.01,405.41 227.86,406.53 C227.11,407.26 220.13,411.92 212.35,416.87 C159.81,450.32 113.03,470.14 37.50,490.96 C29.25,493.24 21.71,495.33 20.75,495.62 C19.09,496.11 19.00,491.88 19.00,416.63 Z M346.57,453.75 C345.54,448.81 343.70,433.97 344.09,433.70 C345.48,432.72 387.25,413.01 387.81,413.08 C388.72,413.17 400.85,427.46 401.53,429.23 C402.22,431.02 395.95,437.33 389.08,441.78 C381.03,446.98 371.67,450.94 361.13,453.62 C349.22,456.64 347.18,456.66 346.57,453.75 Z M329.94,403.75 C325.99,397.01 321.87,390.04 320.80,388.26 L318.84,385.01 L321.38,384.04 C330.56,380.56 343.03,375.03 353.23,369.93 C359.74,366.67 365.27,364.00 365.50,364.00 C365.93,364.00 375.53,393.11 376.15,396.31 C376.43,397.73 372.75,399.90 358.00,407.03 C347.82,411.95 338.97,415.98 338.32,415.99 C337.67,415.99 333.90,410.49 329.94,403.75 Z M238.63,372.75 C230.27,344.08 218.21,315.45 207.59,299.03 L202.94,291.85 L204.49,281.17 C208.17,255.88 213.30,236.27 218.76,226.67 C221.70,221.50 220.15,222.37 251.64,208.02 L257.78,205.22 L264.10,209.22 C271.78,214.07 296.43,226.96 304.00,230.08 C307.02,231.33 309.69,232.50 309.92,232.68 C310.15,232.86 309.25,234.18 307.92,235.62 C301.87,242.16 284.74,250.00 276.52,250.00 C270.06,250.00 259.36,246.87 252.21,242.88 C249.30,241.26 246.60,240.14 246.21,240.39 C245.82,240.64 243.74,244.17 241.58,248.23 L237.66,255.60 L241.93,269.05 C252.05,300.95 269.24,338.43 286.75,366.79 C289.23,370.80 291.06,374.27 290.83,374.51 C290.04,375.29 245.15,386.03 242.77,386.00 C242.62,385.99 240.76,380.03 238.63,372.75 Z M301.28,355.79 C285.64,329.65 275.40,308.41 265.11,280.74 C259.51,265.66 259.48,265.56 261.17,266.60 C261.81,267.00 266.19,267.59 270.91,267.91 L279.48,268.50 L280.21,273.60 C281.27,281.01 284.32,287.36 289.46,292.85 C291.95,295.51 293.73,297.94 293.43,298.24 C292.20,299.47 292.84,313.94 294.36,319.16 C296.59,326.84 301.60,333.98 306.75,336.81 C309.50,338.32 311.00,339.84 311.00,341.10 C311.00,344.88 314.99,354.33 318.47,358.80 C320.41,361.29 322.00,363.62 322.00,363.98 C322.00,364.34 319.64,365.42 316.75,366.39 C313.86,367.35 310.99,368.35 310.37,368.61 C309.73,368.88 305.72,363.22 301.28,355.79 Z M337.48,351.98 C334.51,350.87 332.33,347.96 331.10,343.50 C329.29,336.85 329.53,336.31 335.25,334.44 C343.53,331.73 358.11,324.68 366.09,319.51 L373.41,314.78 L375.65,317.59 C378.72,321.44 379.55,327.04 377.60,330.81 C375.23,335.39 366.29,342.69 358.35,346.52 C350.13,350.50 340.36,353.05 337.48,351.98 Z M312.07,318.37 C310.50,316.37 310.00,314.29 310.00,309.79 C310.00,301.56 312.07,299.74 329.00,293.10 C336.43,290.19 347.14,285.38 352.81,282.41 C358.47,279.43 363.54,277.00 364.06,277.00 C366.68,277.00 371.80,285.83 371.88,290.50 C371.99,296.15 326.79,321.00 316.42,321.00 C315.15,321.00 313.22,319.83 312.07,318.37 Z M302.40,281.23 C300.36,279.87 299.21,276.53 298.50,269.87 L297.79,263.23 L304.15,260.02 C307.64,258.25 314.32,253.97 319.00,250.50 C329.43,242.78 348.83,232.00 352.29,232.00 C357.07,232.00 363.84,241.32 365.51,250.18 L366.17,253.72 L354.06,260.97 C341.63,268.40 332.50,272.65 316.20,278.60 C306.69,282.08 304.33,282.53 302.40,281.23 Z M122.62,243.16 C121.40,241.09 110.92,215.76 111.18,215.52 C111.36,215.37 126.57,208.72 145.00,200.74 C181.76,184.83 321.76,124.18 361.62,106.89 C375.44,100.90 387.14,96.00 387.64,96.00 C388.95,96.00 401.24,123.18 400.30,124.02 C399.86,124.41 367.32,138.57 328.00,155.48 C253.21,187.65 166.94,224.81 139.25,236.79 C130.32,240.66 122.83,243.52 122.62,243.16 Z M323.00,218.56 C319.43,217.29 311.55,213.87 305.50,210.96 L294.50,205.68 L306.50,199.85 C313.10,196.64 319.82,194.01 321.43,194.01 C323.05,194.00 326.24,194.90 328.52,196.01 C338.99,201.08 342.42,211.67 335.85,218.66 C333.15,221.53 331.29,221.52 323.00,218.56 Z M185.03,156.79 C183.96,154.38 169.57,122.33 153.04,85.58 C136.52,48.82 123.00,18.35 123.00,17.86 C123.00,17.35 134.50,17.08 149.67,17.23 L176.35,17.50 L195.66,60.99 C206.28,84.92 215.37,104.62 215.85,104.78 C216.34,104.95 220.14,103.58 224.29,101.75 L231.85,98.42 L214.01,58.14 C202.51,32.17 196.60,17.71 197.36,17.42 C198.01,17.17 209.48,17.08 222.86,17.23 L247.18,17.50 L269.09,65.95 C281.14,92.60 291.00,114.91 291.00,115.53 C291.00,116.33 200.23,156.21 187.87,160.84 C187.37,161.03 186.09,159.20 185.03,156.79 Z"/></svg>';
@@ -1266,6 +1271,9 @@
     }
     if (ui.deleteCharacterConfirm) {
       app.insertAdjacentHTML('beforeend', renderDeleteCharacterModal());
+    }
+    if (ui.themeMenuOpen) {
+      app.insertAdjacentHTML('beforeend', renderThemeMenuModal());
     }
     if (ui.concentrationToast) {
       app.insertAdjacentHTML('beforeend', renderConcentrationToast());
@@ -1829,32 +1837,45 @@
     return 'left:' + (enabled ? '19px' : '3px') + ';';
   }
 
-  function renderThemeToggle() {
+  function themeLabel(value) {
+    return value === 'deneor' ? 'Sombre' : 'Clair';
+  }
+
+  function renderThemeMenuModal() {
     var current = state.themePreference === 'deneor' ? 'deneor' : 'calix';
-    function themeButton(value, label) {
+    function optionRow(value, label) {
       var active = current === value;
-      return '<div data-action="set-theme" data-theme="' + value + '" style="flex:1;height:44px;border-radius:10px;background:' +
-        (active ? 'var(--border-strong)' : 'var(--bg-card)') + ';border:1px solid rgba(var(--border-tint),' + (active ? '0.4' : '0.2') +
-        ');color:' + (active ? 'var(--ink-bright)' : 'var(--text-main)') +
-        ';font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">' + label + '</div>';
+      return '<div data-action="set-theme" data-theme="' + value + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:10px;cursor:pointer;background:' +
+        (active ? 'rgba(var(--border-tint),0.22)' : 'transparent') + ';border:1px solid ' + (active ? 'var(--border-strong)' : 'rgba(var(--border-tint),0.2)') +
+        '">' +
+          '<div style="font-size:15px;font-weight:600;color:' + (active ? 'var(--text-gold)' : 'var(--text-main)') + '">' + label + '</div>' +
+          (active ? '<div style="color:var(--text-gold)">' + iconCheck(18) + '</div>' : '') +
+        '</div>';
     }
-    return '<div style="display:flex;flex-direction:column;gap:8px">' +
-      '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">Thème</div>' +
-      '<div style="display:flex;gap:8px">' + themeButton('calix', 'Clair') + themeButton('deneor', 'Sombre') + '</div>' +
+    return '<div id="themeMenuOverlay" data-action="close-theme-menu" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+      '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="font-size:17px;font-weight:700;color:var(--text-gold)" class="font-cinzel">Thème</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' + optionRow('calix', 'Clair') + optionRow('deneor', 'Sombre') + '</div>' +
+      '</div>' +
     '</div>';
   }
 
   function renderSettings() {
     var menuItems = [
+      { action: 'open-theme-menu', label: 'Thème', value: themeLabel(state.themePreference) },
       { view: 'settings-character', label: 'Paramétrer le personnage' },
       { view: 'settings-grimoire', label: 'Paramétrer le Grimoire' },
       { view: 'settings-load-character', label: 'Charger un personnage' }
     ];
     if (ui.codexAccess === true) menuItems.push({ view: 'settings-codex', label: 'Codex' });
     var itemsHtml = menuItems.map(function (item) {
-      return '<div data-action="nav" data-view="' + item.view + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;cursor:pointer;color:var(--text-main)">' +
+      var actionAttr = item.view ? 'data-action="nav" data-view="' + item.view + '"' : 'data-action="' + item.action + '"';
+      return '<div ' + actionAttr + ' style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.2);border-radius:12px;cursor:pointer;color:var(--text-main)">' +
         '<div style="font-size:15px;font-weight:600">' + item.label + '</div>' +
-        iconChevronRight() +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          (item.value ? '<div style="font-size:13px;color:var(--text-muted)">' + item.value + '</div>' : '') +
+          iconChevronRight() +
+        '</div>' +
         '</div>';
     }).join('');
 
@@ -1867,7 +1888,6 @@
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;flex:none" class="font-cinzel">Paramètres</div>' +
-        renderThemeToggle() +
         '<div style="display:flex;flex-direction:column;gap:10px">' + itemsHtml + '</div>' +
         '<div style="flex:1"></div>' +
         '<div data-action="open-admin" style="flex:none;text-align:center;font-size:11px;color:var(--text-dim);text-decoration:underline;cursor:pointer;padding-bottom:4px">Outil admin</div>' +
@@ -3498,10 +3518,20 @@
         break;
       }
 
+      case 'open-theme-menu':
+        ui.themeMenuOpen = true;
+        render();
+        break;
+      case 'close-theme-menu':
+        ui.themeMenuOpen = false;
+        render();
+        break;
       case 'set-theme': {
+        e.stopPropagation(); // la modale porte elle aussi un data-action (close-theme-menu) sur son fond
         var newTheme = e.currentTarget.getAttribute('data-theme');
         if (newTheme !== 'calix' && newTheme !== 'deneor') break;
-        if (state.themePreference === newTheme) break;
+        ui.themeMenuOpen = false;
+        if (state.themePreference === newTheme) { render(); break; }
         state.themePreference = newTheme;
         applyTheme();
         saveState();
