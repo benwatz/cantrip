@@ -587,7 +587,8 @@
       profiles: [cloneDeep(characters.calix.savedProfile)],
       activeCharacterId: 'calix',
       characters: characters,
-      characterOrder: CHARACTER_ORDER.slice()
+      characterOrder: CHARACTER_ORDER.slice(),
+      themePreference: 'calix'
     };
   }
 
@@ -657,6 +658,18 @@
       if (!parsed.characterOrder.length) parsed.characterOrder = CHARACTER_ORDER.slice();
 
       if (parsed.characterOrder.indexOf(parsed.activeCharacterId) === -1) parsed.activeCharacterId = parsed.characterOrder[0];
+
+      // Préférence de thème (août 2026) : indépendante du personnage actif désormais. Première
+      // fois qu'une sauvegarde antérieure à cette fonctionnalité est chargée (champ absent), le
+      // défaut reprend le thème du personnage actif à cet instant précis (calix -> clair, deneor
+      // -> sombre) plutôt que de tout basculer en clair d'un coup — un appareil où Deneor était
+      // déjà le personnage chargé garde son thème sombre ; un nouvel appareil (jamais de sauvegarde
+      // du tout, voir defaultState()) démarre en clair. Une fois déterminée ici (ou choisie
+      // manuellement dans Paramètres), la valeur ne se recalcule plus jamais automatiquement.
+      if (parsed.themePreference !== 'calix' && parsed.themePreference !== 'deneor') {
+        var migratedChar = parsed.characters[parsed.activeCharacterId];
+        parsed.themePreference = (migratedChar && migratedChar.theme === 'deneor') ? 'deneor' : 'calix';
+      }
       return parsed;
     } catch (e) {
       return defaultState();
@@ -672,8 +685,7 @@
   var THEME_COLOR_META = { calix: '#ecdcb0', deneor: '#0a1712' };
 
   function activeTheme() {
-    var character = state.characters[state.activeCharacterId];
-    return (character && character.theme) || 'calix';
+    return state.themePreference === 'deneor' ? 'deneor' : 'calix';
   }
 
   function applyTheme() {
@@ -1795,6 +1807,21 @@
     return 'left:' + (enabled ? '19px' : '3px') + ';';
   }
 
+  function renderThemeToggle() {
+    var current = state.themePreference === 'deneor' ? 'deneor' : 'calix';
+    function themeButton(value, label) {
+      var active = current === value;
+      return '<div data-action="set-theme" data-theme="' + value + '" style="flex:1;height:44px;border-radius:10px;background:' +
+        (active ? 'var(--border-strong)' : 'var(--bg-card)') + ';border:1px solid rgba(var(--border-tint),' + (active ? '0.4' : '0.2') +
+        ');color:' + (active ? 'var(--ink-bright)' : 'var(--text-main)') +
+        ';font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">' + label + '</div>';
+    }
+    return '<div style="display:flex;flex-direction:column;gap:8px">' +
+      '<div style="font-size:12px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:0.08em">Thème</div>' +
+      '<div style="display:flex;gap:8px">' + themeButton('calix', 'Clair') + themeButton('deneor', 'Sombre') + '</div>' +
+    '</div>';
+  }
+
   function renderSettings() {
     var menuItems = [
       { view: 'settings-character', label: 'Paramétrer le personnage' },
@@ -1818,6 +1845,7 @@
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;flex:none" class="font-cinzel">Paramètres</div>' +
+        renderThemeToggle() +
         '<div style="display:flex;flex-direction:column;gap:10px">' + itemsHtml + '</div>' +
         '<div style="flex:1"></div>' +
         '<div data-action="open-admin" style="flex:none;text-align:center;font-size:11px;color:var(--text-dim);text-decoration:underline;cursor:pointer;padding-bottom:4px">Outil admin</div>' +
@@ -3448,6 +3476,17 @@
         break;
       }
 
+      case 'set-theme': {
+        var newTheme = e.currentTarget.getAttribute('data-theme');
+        if (newTheme !== 'calix' && newTheme !== 'deneor') break;
+        if (state.themePreference === newTheme) break;
+        state.themePreference = newTheme;
+        applyTheme();
+        saveState();
+        render();
+        break;
+      }
+
       // Bascule locale instantanée du personnage actif (voir commentaire sur activateButtonHtml
       // dans renderSettingsLoadCharacter()) — aucune confirmation nécessaire : chaque mutation de
       // jeu est déjà persistée au fil de l'eau (saveState() immédiat), il n'y a donc rien à perdre
@@ -3458,7 +3497,6 @@
         if (!activateChar) break;
         state.activeCharacterId = activateId;
         state.profiles[state.activeProfileIndex] = cloneDeep(activateChar.savedProfile);
-        applyTheme();
         saveState();
         ui.view = 'tracker';
         render();
@@ -3500,7 +3538,6 @@
         if (state.activeCharacterId === deleteId) {
           state.activeCharacterId = state.characterOrder.indexOf('calix') !== -1 ? 'calix' : state.characterOrder[0];
           state.profiles[state.activeProfileIndex] = cloneDeep(state.characters[state.activeCharacterId].savedProfile);
-          applyTheme();
         }
         ui.characterCarouselIndex = clamp(ui.characterCarouselIndex, 0, state.characterOrder.length - 1);
         saveState();
@@ -3676,7 +3713,6 @@
       state.characters[charId].grimoire = loadedGrimoire;
       state.profiles[state.activeProfileIndex] = cloneDeep(loadedProfile);
       state.activeCharacterId = charId;
-      applyTheme();
       saveState();
       ui.fbBusy = false;
       ui.view = 'tracker';

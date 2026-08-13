@@ -569,27 +569,46 @@ révisé"). En cas de divergence, les arbitrages suivants ont été retenus :
   `focusin` sur `#app`, tape directement pour remplacer la valeur), **sauf** le champ de
   recherche des compétences (`#statsSearchInput`) qui reste un filtre en direct.
 
-## Thèmes (Calix / Deneor)
+## Thèmes (Calix / Deneor = Clair / Sombre)
 
-Il n'y a plus de toggle clair/sombre manuel : le thème visuel est une propriété de chaque
-personnage (`state.characters[id].theme`, `'calix'` | `'deneor'`) et s'applique automatiquement
-au chargement de ce personnage (`applyTheme()`, appelé au démarrage depuis `loadState()`/
-`defaultState()` et lors de l'action `data-action="load-character"`). `activeTheme()` lit
-`state.characters[state.activeCharacterId].theme` (repli sur `'calix'` si absent) ;
-`applyTheme()` pose cette valeur sur l'attribut `data-theme` de `<html>` et met à jour le
-`<meta name="theme-color">` via la table `THEME_COLOR_META`.
-- **Thème Calix** (`:root`, valeurs par défaut sans attribut) — ocre/parchemin clair, hérité de
-  l'ancien thème clair unique (pas blanc, pour garder l'aspect médiéval).
-- **Thème Deneor** (`:root[data-theme="deneor"]`) — palette sombre vert forêt construite autour
-  de Pantone 3435 C (`#154734`, utilisé comme `--border-strong`), cohérente avec le thème de
+**Toggle manuel réintroduit en août 2026** (revient sur l'ancienne décision "plus de toggle
+clair/sombre manuel, le thème suit le personnage") : le thème visuel est désormais une préférence
+globale de l'appareil, indépendante du personnage actif — `state.themePreference` (`'calix'` |
+`'deneor'`, réutilise les mêmes noms de valeurs que l'ancien `character.theme` pour rester
+cohérent avec `THEME_COLOR_META`/le CSS), choisie depuis un toggle "Clair"/"Sombre"
+(`renderThemeToggle()`, en tête de `renderSettings()`, `data-action="set-theme"`) et persistée
+via `saveState()` comme le reste de `state`. `activeTheme()` lit directement
+`state.themePreference` (repli sur `'calix'` si absent/invalide) ; `applyTheme()` (inchangée) pose
+cette valeur sur l'attribut `data-theme` de `<html>` et met à jour le `<meta name="theme-color">`
+via la table `THEME_COLOR_META`. Charger/activer/sauvegarder un personnage ne touche plus au thème
+(les appels `applyTheme()` qui suivaient `activate-character`, la suppression d'un personnage actif
+et `performFbLoad()` ont été retirés) — seul le toggle de Paramètres et le calcul de démarrage
+ci-dessous changent `state.themePreference`.
+- **Thème Calix / "Clair"** (`:root`, valeurs par défaut sans attribut) — ocre/parchemin clair,
+  hérité de l'ancien thème clair unique (pas blanc, pour garder l'aspect médiéval).
+- **Thème Deneor / "Sombre"** (`:root[data-theme="deneor"]`) — palette sombre vert forêt construite
+  autour de Pantone 3435 C (`#154734`, utilisé comme `--border-strong`), cohérente avec le thème de
   Paladin sous Serment des Anciens de Deneor Sentariel.
 Les deux jeux de variables CSS custom properties (fonds, bordures, textes, couleurs d'accent des
 badges) sont définis en tête de fichier dans le bloc `<style>`. **Toute nouvelle couleur ajoutée
 dans un template JS doit utiliser `var(--...)` plutôt qu'un hex en dur** pour rester compatible
 avec les deux thèmes.
 Le `<meta name="theme-color">` initial dans `<head>` et `background_color`/`theme_color` dans
-`manifest.json` reflètent la teinte Calix par défaut (`#ecdcb0`), puisque Calix reste le
-personnage chargé par défaut sur un état vierge.
+`manifest.json` reflètent la teinte Calix/Clair par défaut (`#ecdcb0`), puisque c'est le thème par
+défaut sur un état vierge.
+
+**Valeur par défaut à la première connexion (`loadState()`)** : `state.themePreference` n'existe
+pas sur les sauvegardes antérieures à cette fonctionnalité (ni sur un état totalement vierge, voir
+`defaultState()` qui pose directement `'calix'`). Dans ce cas, `loadState()` calcule un défaut
+unique basé sur le personnage actif *au moment de la migration* (`parsed.activeCharacterId`) :
+si son `character.theme` codé en dur valait `'deneor'`, la préférence démarre en sombre (couvre le
+cas d'un appareil où Deneor était déjà le personnage chargé — typiquement celui du joueur qui
+incarne Deneor) ; sinon (Calix, ou tout autre cas) elle démarre en clair, y compris pour un tout
+nouvel appareil sans aucune sauvegarde (`defaultState()`). Une fois posée (par cette migration ou
+par un choix explicite dans Paramètres), la valeur ne se recalcule plus jamais automatiquement — le
+champ `character.theme` par personnage (`state.characters[id].theme`) reste dans le modèle de
+données pour cette seule lecture de migration ponctuelle, mais ne pilote plus rien d'autre depuis
+ce changement.
 
 ## Clavier virtuel mobile (`visualViewport`)
 
