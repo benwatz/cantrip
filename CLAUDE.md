@@ -573,12 +573,12 @@ révisé"). En cas de divergence, les arbitrages suivants ont été retenus :
 
 **Toggle manuel réintroduit en août 2026** (revient sur l'ancienne décision "plus de toggle
 clair/sombre manuel, le thème suit le personnage") : le thème visuel est désormais une préférence
-globale de l'appareil, indépendante du personnage actif — `state.themePreference` (`'calix'` |
-`'deneor'`, réutilise les mêmes noms de valeurs que l'ancien `character.theme` pour rester
-cohérent avec `THEME_COLOR_META`/le CSS), choisie depuis un toggle "Clair"/"Sombre"
-(`renderThemeToggle()`, en tête de `renderSettings()`, `data-action="set-theme"`) et persistée
-via `saveState()` comme le reste de `state`. `activeTheme()` lit directement
-`state.themePreference` (repli sur `'calix'` si absent/invalide) ; `applyTheme()` (inchangée) pose
+globale de l'appareil, indépendante du personnage actif — `state.themePreference` (`null` tant que
+non résolu, puis `'calix'` | `'deneor'`, réutilise les mêmes noms de valeurs que l'ancien
+`character.theme` pour rester cohérent avec `THEME_COLOR_META`/le CSS), choisie depuis un toggle
+"Clair"/"Sombre" (`renderThemeToggle()`, en tête de `renderSettings()`, `data-action="set-theme"`)
+et persistée via `saveState()` comme le reste de `state`. `activeTheme()` lit directement
+`state.themePreference` (repli sur `'calix'` tant que `null`/invalide) ; `applyTheme()` (inchangée) pose
 cette valeur sur l'attribut `data-theme` de `<html>` et met à jour le `<meta name="theme-color">`
 via la table `THEME_COLOR_META`. Charger/activer/sauvegarder un personnage ne touche plus au thème
 (les appels `applyTheme()` qui suivaient `activate-character`, la suppression d'un personnage actif
@@ -597,18 +597,29 @@ Le `<meta name="theme-color">` initial dans `<head>` et `background_color`/`them
 `manifest.json` reflètent la teinte Calix/Clair par défaut (`#ecdcb0`), puisque c'est le thème par
 défaut sur un état vierge.
 
-**Valeur par défaut à la première connexion (`loadState()`)** : `state.themePreference` n'existe
-pas sur les sauvegardes antérieures à cette fonctionnalité (ni sur un état totalement vierge, voir
-`defaultState()` qui pose directement `'calix'`). Dans ce cas, `loadState()` calcule un défaut
-unique basé sur le personnage actif *au moment de la migration* (`parsed.activeCharacterId`) :
-si son `character.theme` codé en dur valait `'deneor'`, la préférence démarre en sombre (couvre le
-cas d'un appareil où Deneor était déjà le personnage chargé — typiquement celui du joueur qui
-incarne Deneor) ; sinon (Calix, ou tout autre cas) elle démarre en clair, y compris pour un tout
-nouvel appareil sans aucune sauvegarde (`defaultState()`). Une fois posée (par cette migration ou
-par un choix explicite dans Paramètres), la valeur ne se recalcule plus jamais automatiquement — le
-champ `character.theme` par personnage (`state.characters[id].theme`) reste dans le modèle de
-données pour cette seule lecture de migration ponctuelle, mais ne pilote plus rien d'autre depuis
-ce changement.
+**Valeur par défaut à la première connexion, basée sur la propriété Firebase du personnage
+(`resolveDefaultTheme()`)** : `state.themePreference` démarre à `null` aussi bien sur un état
+vierge (`defaultState()`) que sur une sauvegarde antérieure à cette fonctionnalité migrée par
+`loadState()` (champ absent/invalide → remis à `null`, jamais résolu de façon synchrone à ce
+stade — `loadState()` s'exécute avant toute réponse Firebase). La résolution effective se fait de
+façon asynchrone, câblée sur `fbAuth.onAuthStateChanged(function (user) { checkCodexAccess(user);
+resolveDefaultTheme(user); })` (même point d'entrée que le Codex, déclenché par une session Google
+déjà persistée, sans popup de connexion) :
+- si `state.themePreference` est déjà `'calix'`/`'deneor'` (choix déjà résolu ou déjà fait
+  manuellement dans Paramètres), `resolveDefaultTheme()` ne fait rien — "je garde la valeur
+  changée si je change moi-même" s'applique aussi bien à une résolution automatique passée qu'à un
+  choix manuel, les deux rendent la valeur définitive.
+- si `user` est `null` (pas de session Firebase persistée sur cet appareil) : thème clair par
+  défaut — c'est le cas général ("mon compte").
+- sinon, lecture de `characterOwners/deneor` (RTDB) : si elle vaut l'uid de l'utilisateur connecté
+  — c'est-à-dire l'utilisateur qui a le droit de **supprimer** Deneor dans "Gestion des
+  personnages" (voir section Personnages, `characterOwners/{charId} === auth.uid` conditionne la
+  suppression) — thème sombre par défaut ; sinon (autre utilisateur, ou Deneor jamais encore
+  revendiqué) thème clair. Un échec de lecture (hors ligne, permission refusée) retombe aussi sur
+  le clair plutôt que de bloquer la résolution.
+Nécessite une règle RTDB dédiée (`characterOwners/$charId` en lecture pour son propre uid, ajoutée
+le 2026-08-13 — voir le "Piège corrigé" dans la section Synchronisation cloud) puisque
+`characterOwners` était jusque-là lisible uniquement par l'admin.
 
 ## Clavier virtuel mobile (`visualViewport`)
 
@@ -692,6 +703,7 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
       "characterOwners": {
         ".read": "auth.uid === '<UID admin>'",
         "$charId": {
+          ".read": "auth != null && data.val() === auth.uid",
           ".write": "auth.uid === '<UID admin>' || (auth != null && root.child('approvedUsers').child(auth.uid).val() === true && !data.exists() && newData.val() === auth.uid)"
         }
       },
@@ -722,6 +734,19 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
     }
   }
   ```
+  **Piège corrigé (2026-08-13)** : `characterOwners/$charId` n'avait aucun `.read` propre (seul le
+  nœud parent `characterOwners` était lisible, admin-only) — ajouté pour que
+  `resolveDefaultTheme()` (`index.html`, voir section Thèmes plus bas) puisse lire
+  `characterOwners/deneor` côté client et déterminer si l'utilisateur Firebase actuellement
+  connecté (session déjà persistée, sans popup) est le propriétaire de Deneor, sans passer par
+  l'admin. Volontairement restreint en lecture à `data.val() === auth.uid` (l'utilisateur ne peut
+  vérifier que **sa propre** propriété d'un personnage, jamais lire l'identité du propriétaire
+  d'un autre) plutôt qu'un `auth != null` large — cohérent avec `approvedUsers/$uid` (même
+  principe de self-read, voir le "Piège corrigé (2026-08-08)" ci-dessous). **À publier
+  manuellement dans la Firebase Console** (comme toute règle RTDB de ce projet, voir le bloc
+  canonique ci-dessus) : sans elle, la lecture échoue en `PERMISSION_DENIED`, traitée comme
+  "non propriétaire" par `resolveDefaultTheme()` (repli silencieux sur le thème clair, pas
+  d'erreur visible côté joueur).
   **Codex (2026-08-08)** : contenu (`codex/{pnjId}`) et accès (`codexAccess/{uid}`, un booléen par
   utilisateur — pas de dimension par personnage comme `characterAccess`, une seule ressource
   partagée) gérés entièrement par l'admin depuis `cantrip-admin.html`. `codex` est en écriture

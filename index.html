@@ -588,7 +588,7 @@
       activeCharacterId: 'calix',
       characters: characters,
       characterOrder: CHARACTER_ORDER.slice(),
-      themePreference: 'calix'
+      themePreference: null // résolu en clair/sombre par resolveDefaultTheme() au premier auth check
     };
   }
 
@@ -659,17 +659,11 @@
 
       if (parsed.characterOrder.indexOf(parsed.activeCharacterId) === -1) parsed.activeCharacterId = parsed.characterOrder[0];
 
-      // Préférence de thème (août 2026) : indépendante du personnage actif désormais. Première
-      // fois qu'une sauvegarde antérieure à cette fonctionnalité est chargée (champ absent), le
-      // défaut reprend le thème du personnage actif à cet instant précis (calix -> clair, deneor
-      // -> sombre) plutôt que de tout basculer en clair d'un coup — un appareil où Deneor était
-      // déjà le personnage chargé garde son thème sombre ; un nouvel appareil (jamais de sauvegarde
-      // du tout, voir defaultState()) démarre en clair. Une fois déterminée ici (ou choisie
-      // manuellement dans Paramètres), la valeur ne se recalcule plus jamais automatiquement.
-      if (parsed.themePreference !== 'calix' && parsed.themePreference !== 'deneor') {
-        var migratedChar = parsed.characters[parsed.activeCharacterId];
-        parsed.themePreference = (migratedChar && migratedChar.theme === 'deneor') ? 'deneor' : 'calix';
-      }
+      // Préférence de thème (août 2026) : indépendante du personnage actif désormais. Une
+      // sauvegarde antérieure à cette fonctionnalité (champ absent) reste non résolue (`null`) —
+      // resolveDefaultTheme() la détermine au premier retour d'authentification Firebase (voir
+      // plus bas), pas ici (loadState() est synchrone, avant toute réponse Firebase).
+      if (parsed.themePreference !== 'calix' && parsed.themePreference !== 'deneor') parsed.themePreference = null;
       return parsed;
     } catch (e) {
       return defaultState();
@@ -693,6 +687,34 @@
     document.documentElement.setAttribute('data-theme', theme);
     var themeColorMeta = document.querySelector('meta[name="theme-color"]');
     if (themeColorMeta) themeColorMeta.setAttribute('content', THEME_COLOR_META[theme] || THEME_COLOR_META.calix);
+  }
+
+  // Détermine le thème par défaut la toute première fois (state.themePreference encore `null`,
+  // voir loadState()) : sombre pour le propriétaire de Deneor (celui qui a le droit de le
+  // supprimer, characterOwners/deneor en base — voir la règle RTDB .read dédiée dans la section
+  // Synchronisation cloud du CLAUDE.md), clair pour tout le monde (dont "mon compte" — cas par
+  // défaut).
+  // Appelé depuis fbAuth.onAuthStateChanged (session Google déjà persistée ou non, jamais de
+  // popup de connexion ici) : tant qu'aucune session n'est résolue, ou hors ligne, ou en cas
+  // d'erreur, le clair par défaut s'applique et n'est jamais reconsidéré ensuite — comme un choix
+  // manuel dans Paramètres, une fois posée la valeur ne se recalcule plus (data.val() ci-dessous
+  // vaut null si personne n'a encore réclamé Deneor, ce qui retombe aussi sur le clair).
+  function resolveDefaultTheme(user) {
+    if (state.themePreference === 'calix' || state.themePreference === 'deneor') return;
+    if (!user) { state.themePreference = 'calix'; saveState(); applyTheme(); render(); return; }
+    fbDb.ref('characterOwners/deneor').once('value').then(function (snapshot) {
+      if (state.themePreference === 'calix' || state.themePreference === 'deneor') return;
+      state.themePreference = (snapshot.val() === user.uid) ? 'deneor' : 'calix';
+      saveState();
+      applyTheme();
+      render();
+    }).catch(function () {
+      if (state.themePreference === 'calix' || state.themePreference === 'deneor') return;
+      state.themePreference = 'calix';
+      saveState();
+      applyTheme();
+      render();
+    });
   }
 
   // ---- synchronisation Firebase (Realtime Database, nœud "cantrip") ----
@@ -3864,7 +3886,7 @@
     render();
   }
 
-  fbAuth.onAuthStateChanged(function (user) { checkCodexAccess(user); });
+  fbAuth.onAuthStateChanged(function (user) { checkCodexAccess(user); resolveDefaultTheme(user); });
 
   render();
 
