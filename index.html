@@ -1913,10 +1913,10 @@
 
   function renderSettings() {
     var menuItems = [
-      { action: 'open-theme-menu', label: 'Thème', value: themeLabel(state.themePreference) },
       { view: 'settings-character', label: 'Paramétrer le personnage' },
       { view: 'settings-grimoire', label: 'Paramétrer le Grimoire' },
-      { view: 'settings-load-character', label: 'Charger un personnage' }
+      { view: 'settings-load-character', label: 'Charger un personnage' },
+      { action: 'open-theme-menu', label: 'Thème', value: themeLabel(state.themePreference) }
     ];
     if (ui.codexAccess === true) menuItems.push({ view: 'settings-codex', label: 'Codex' });
     var itemsHtml = menuItems.map(function (item) {

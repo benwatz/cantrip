@@ -626,10 +626,12 @@ clair/sombre manuel, le thème suit le personnage") : le thème visuel est déso
 globale de l'appareil, indépendante du personnage actif — `state.themePreference` (`null` tant que
 non résolu, puis `'calix'` | `'deneor'`, réutilise les mêmes noms de valeurs que l'ancien
 `character.theme` pour rester cohérent avec `THEME_COLOR_META`/le CSS), choisie depuis une entrée
-de menu **"Thème"** en tête de `renderSettings()` (même gabarit que les autres lignes du menu
+de menu **"Thème"** dans `renderSettings()` (même gabarit que les autres lignes du menu
 Paramètres — libellé à gauche, valeur courante ("Clair"/"Sombre", `themeLabel()`) puis chevron à
 droite — plutôt que directement affichée en toggle sur la page, pour ne pas alourdir l'écran
-principal ; `data-action="open-theme-menu"`, `ui.themeMenuOpen` booléen éphémère). Le tap ouvre
+principal ; `data-action="open-theme-menu"`, `ui.themeMenuOpen` booléen éphémère). Positionnée
+entre "Charger un personnage" et "Codex" dans `menuItems` (déplacée depuis le haut du menu, où
+elle se trouvait initialement, en août 2026). Le tap ouvre
 `renderThemeMenuModal()`, une modale au même gabarit que `renderDeleteCharacterModal()` (fond
 sombre + carte centrée) listant les deux options en lignes sélectionnables (coche `iconCheck()`
 sur l'option active) ; taper une option (`data-action="set-theme"`) l'applique **et** referme la
