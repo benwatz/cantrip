@@ -891,7 +891,7 @@
     restToast: null, // null | { leaving: bool } — confirmation "Vous êtes reposé(e)." après la modale Repos
     restToastEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     fbConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Firebase est ouverte
-    createCharacterModal: null, // { name: string } quand la modale "Créer un personnage" est ouverte
+    createCharacterModal: null, // { name: string, portrait: string|null, portraitBusy: bool, portraitError: string|null } quand la modale "Créer un personnage" est ouverte — portrait est déjà la dataURL redimensionnée/compressée (voir resizeAndCompressPortrait), prête à être stockée telle quelle sur Firebase
     deleteCharacterConfirm: null, // { charId } quand la confirmation de suppression est ouverte (jamais pour calix/deneor)
     themeMenuOpen: false, // true quand la modale de choix du thème (Clair/Sombre) est ouverte
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
@@ -2463,12 +2463,65 @@
     '</div>';
   }
 
+  // Redimensionne (plus grand côté ramené à PORTRAIT_MAX_DIM px) et recompresse (JPEG) l'image
+  // choisie à la création d'un personnage, avant de la stocker en dataURL — à la fois dans
+  // state.characters[id].portrait (localStorage) et, à la prochaine sauvegarde Firebase, dans
+  // cantrip/{charId}.portrait (voir performFbSave) : sans ce passage par canvas, une simple photo
+  // de téléphone (plusieurs Mo) gonflerait démesurément les deux. 320px suffit largement à
+  // l'affichage le plus grand du portrait dans l'app (180px, carrousel "Charger un personnage").
+  var PORTRAIT_MAX_DIM = 320;
+  var PORTRAIT_JPEG_QUALITY = 0.82;
+
+  function resizeAndCompressPortrait(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file || !/^image\//.test(file.type)) { reject(new Error('Fichier image invalide.')); return; }
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error('Lecture du fichier impossible.')); };
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = function () { reject(new Error('Image illisible.')); };
+        img.onload = function () {
+          var scale = Math.min(1, PORTRAIT_MAX_DIM / Math.max(img.width, img.height));
+          var w = Math.max(1, Math.round(img.width * scale));
+          var h = Math.max(1, Math.round(img.height * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', PORTRAIT_JPEG_QUALITY));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function renderCreateCharacterModal() {
     var name = ui.createCharacterModal.name;
+    var portrait = ui.createCharacterModal.portrait;
+    var portraitAvatarHtml = portrait
+      ? '<img src="' + escapeHtml(portrait) + '" alt="" draggable="false" style="flex:none;width:64px;height:64px;border-radius:50%;object-fit:cover;border:1px solid rgba(var(--border-tint),0.35)"/>'
+      : '<div style="flex:none;width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(var(--border-tint),0.16);border:1px solid rgba(var(--border-tint),0.35);color:var(--text-muted)">' + iconCharacter(false, 30) + '</div>';
+    var portraitStatusHtml = ui.createCharacterModal.portraitBusy
+      ? '<div style="font-size:11.5px;color:var(--text-muted)">Traitement de l’image…</div>'
+      : (ui.createCharacterModal.portraitError
+        ? '<div style="font-size:11.5px;color:#ef4444">' + escapeHtml(ui.createCharacterModal.portraitError) + '</div>'
+        : '<div style="font-size:11.5px;color:var(--text-muted)">' + (portrait ? 'Portrait sélectionné' : 'Portrait optionnel') + '</div>');
     return '<div id="createCharacterOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
       '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
         '<div style="font-size:17px;font-weight:700;color:var(--text-gold)" class="font-cinzel">Créer un personnage</div>' +
         '<input id="createCharacterNameInput" type="text" value="' + escapeHtml(name) + '" placeholder="Nom du personnage" maxlength="40" style="height:44px;background:var(--bg-deep);border:1px solid rgba(var(--border-tint),0.24);border-radius:10px;color:var(--text-main);font-size:15px;padding:0 12px;box-sizing:border-box"/>' +
+        '<div style="display:flex;align-items:center;gap:12px">' +
+          '<label for="createCharacterPortraitInput" style="cursor:pointer">' + portraitAvatarHtml + '</label>' +
+          '<div style="display:flex;flex-direction:column;gap:5px;min-width:0">' +
+            portraitStatusHtml +
+            '<div style="display:flex;gap:12px">' +
+              '<label for="createCharacterPortraitInput" style="font-size:11.5px;color:var(--text-label);text-decoration:underline;cursor:pointer">' + (portrait ? 'Changer' : 'Choisir une image') + '</label>' +
+              (portrait ? '<div data-action="create-character-remove-portrait" style="font-size:11.5px;color:var(--text-label);text-decoration:underline;cursor:pointer">Supprimer</div>' : '') +
+            '</div>' +
+          '</div>' +
+          '<input id="createCharacterPortraitInput" type="file" accept="image/*" style="display:none"/>' +
+        '</div>' +
         '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.4">Personnage vierge (fiche à zéro, grimoire vide) ajouté à la liste ci-dessous. Tout se règle ensuite dans Paramètres.</div>' +
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<div data-action="cancel-create-character" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
@@ -2872,6 +2925,28 @@
       createCharacterNameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') confirmCreateCharacter(); });
     }
 
+    var createCharacterPortraitInput = document.getElementById('createCharacterPortraitInput');
+    if (createCharacterPortraitInput) {
+      createCharacterPortraitInput.addEventListener('change', function () {
+        var file = createCharacterPortraitInput.files && createCharacterPortraitInput.files[0];
+        if (!file || !ui.createCharacterModal) return;
+        ui.createCharacterModal.portraitBusy = true;
+        ui.createCharacterModal.portraitError = null;
+        render();
+        resizeAndCompressPortrait(file).then(function (dataUrl) {
+          if (!ui.createCharacterModal) return;
+          ui.createCharacterModal.portrait = dataUrl;
+          ui.createCharacterModal.portraitBusy = false;
+          render();
+        }).catch(function () {
+          if (!ui.createCharacterModal) return;
+          ui.createCharacterModal.portraitBusy = false;
+          ui.createCharacterModal.portraitError = 'Impossible d’utiliser cette image.';
+          render();
+        });
+      });
+    }
+
     var goldInput = document.getElementById('goldInput');
     if (goldInput) {
       goldInput.addEventListener('change', function () {
@@ -2956,8 +3031,9 @@
   function confirmCreateCharacter() {
     if (!ui.createCharacterModal) return;
     var newCharName = (ui.createCharacterModal.name || '').trim() || 'Nouveau personnage';
+    var newCharPortrait = ui.createCharacterModal.portrait || null;
     var newCharId = generateCharacterId();
-    state.characters[newCharId] = makeCharacter(newCharId, newCharName, '', null, null, 'calix');
+    state.characters[newCharId] = makeCharacter(newCharId, newCharName, '', null, newCharPortrait, 'calix');
     state.characterOrder.push(newCharId);
     ui.characterCarouselIndex = state.characterOrder.length - 1;
     ui.createCharacterModal = null;
@@ -3561,7 +3637,7 @@
       }
 
       case 'open-create-character':
-        ui.createCharacterModal = { name: '' };
+        ui.createCharacterModal = { name: '', portrait: null, portraitBusy: false, portraitError: null };
         render();
         break;
       case 'cancel-create-character':
@@ -3570,6 +3646,10 @@
         break;
       case 'confirm-create-character':
         confirmCreateCharacter();
+        break;
+      case 'create-character-remove-portrait':
+        if (ui.createCharacterModal) { ui.createCharacterModal.portrait = null; ui.createCharacterModal.portraitError = null; }
+        render();
         break;
 
       case 'open-delete-character': {
@@ -3768,6 +3848,11 @@
       sanitizeProfile(loadedProfile);
       state.characters[charId].savedProfile = loadedProfile;
       state.characters[charId].grimoire = loadedGrimoire;
+      // Rapatrie le portrait distant pour un personnage créé dynamiquement (voir
+      // resizeAndCompressPortrait/performFbSave) — sans effet réel pour Calix/Deneor, dont
+      // l'identité (portrait compris) est de toute façon resynchronisée depuis le code à chaque
+      // loadState(), voir CHARACTER_ORDER.
+      if (typeof entry.portrait === 'string' && entry.portrait) state.characters[charId].portrait = entry.portrait;
       // Rapatrie la date de la dernière sauvegarde distante (absente sur une entrée antérieure à
       // cette fonctionnalité, ou écrite par cantrip-admin.html avant qu'il ne pose ce champ à son
       // tour) plutôt que de fabriquer un "maintenant" qui suggérerait à tort une sauvegarde toute
@@ -3808,7 +3893,9 @@
     fbLoadCharacterEntry(charId).catch(function () { return null; }).then(function (existingEntry) {
       var wasExisting = existingEntry && typeof existingEntry === 'object';
       var existingGrimoire = (wasExisting && existingEntry.grimoire && Array.isArray(existingEntry.grimoire.sections)) ? existingEntry.grimoire : null;
-      return fbSaveCharacterEntry(charId, { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire, savedAt: fbSaveAt }).then(function () {
+      // Portrait redimensionné/compressé (voir resizeAndCompressPortrait) : envoyé tel quel, déjà
+      // une dataURL JPEG légère. null pour un personnage sans portrait (RTDB efface le champ).
+      return fbSaveCharacterEntry(charId, { profile: fbSaveProfile, grimoire: fbSaveGrimoire || existingGrimoire, savedAt: fbSaveAt, portrait: state.characters[charId].portrait || null }).then(function () {
         if (!wasExisting) return fbClaimOwnership(charId);
       });
     }).then(function () {

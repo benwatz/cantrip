@@ -522,18 +522,35 @@ Le profil réellement affiché/édité dans toute l'app reste `state.profiles[st
   encore jamais été édité localement.
   Le Grimoire affiché dépend de `state.activeCharacterId` (`activeSpellbook()`/`characterGrimoire()`,
   voir section Grimoire plus haut).
-  **Créer un personnage** (`renderCreateCharacterModal()`, `ui.createCharacterModal = { name }`) —
-  petite modale à un seul champ (nom, présélectionné/focalisé à l'ouverture). "Créer"
-  (`confirmCreateCharacter()`, appelée à la fois par le clic et par Entrée dans le champ) génère un
-  id via `generateCharacterId()` (préfixe `char_`, distinct de `generateId()`/`cr_` utilisé pour
+  **Créer un personnage** (`renderCreateCharacterModal()`, `ui.createCharacterModal = { name,
+  portrait, portraitBusy, portraitError }`) — petite modale à un champ nom (présélectionné/
+  focalisé à l'ouverture) et un portrait optionnel (ajouté août 2026). Le portrait est choisi via
+  un `<input type="file" accept="image/*">` masqué (`#createCharacterPortraitInput`), déclenché par
+  un `<label for="...">` posé aussi bien sur l'avatar-aperçu que sur le lien texte "Choisir une
+  image"/"Changer" (pas de `data-action`/JS pour ouvrir le sélecteur : un `<label for>` suffit).
+  Au `change`, le fichier passe par `resizeAndCompressPortrait()` (redimensionne au format `<canvas>`
+  — plus grand côté ramené à `PORTRAIT_MAX_DIM` = 320px, suffisant pour le plus grand affichage du
+  portrait dans l'app, 180px dans le carrousel — puis réexporte en JPEG via
+  `canvas.toDataURL('image/jpeg', PORTRAIT_JPEG_QUALITY = 0.82)`) avant d'atterrir dans
+  `ui.createCharacterModal.portrait` sous forme de dataURL ; `portraitBusy` couvre le court instant
+  de traitement (lecture fichier + décodage + canvas, asynchrone), `portraitError` un fichier non
+  image/illisible. Un lien "Supprimer" (`data-action="create-character-remove-portrait"`) réapparaît
+  tant qu'un portrait est choisi pour revenir à l'avatar générique. "Créer"
+  (`confirmCreateCharacter()`, appelée à la fois par le clic et par Entrée dans le champ nom) génère
+  un id via `generateCharacterId()` (préfixe `char_`, distinct de `generateId()`/`cr_` utilisé pour
   les ressources de classe et attaques, pour rester lisible dans un export JSON), crée le
-  personnage via `makeCharacter(id, name, '', null, null, 'calix')` — pas de sous-titre, pas de
-  niveau, pas de portrait (`renderCharacterAvatar()` affiche alors une icône générique dans un
-  cercle teinté plutôt qu'un `<img>`), thème `'calix'` (qui est déjà le thème "neutre" : `:root`
-  sans attribut `data-theme`, aucun `[data-theme="calix"]` dédié n'existe dans le CSS) — puis
-  l'ajoute à `state.characters`/`state.characterOrder` et positionne le carrousel dessus
-  (`ui.characterCarouselIndex`). Ne l'active **pas** automatiquement : il faut ensuite taper
-  "Activer ce personnage" comme pour n'importe quel autre personnage non actif.
+  personnage via `makeCharacter(id, name, '', null, portraitDataUrlOuNull, 'calix')` — pas de
+  sous-titre, pas de niveau ; sans portrait choisi, `renderCharacterAvatar()` affiche une icône
+  générique dans un cercle teinté plutôt qu'un `<img>`, comme avant — thème `'calix'` (qui est déjà
+  le thème "neutre" : `:root` sans attribut `data-theme`, aucun `[data-theme="calix"]` dédié n'existe
+  dans le CSS) — puis l'ajoute à `state.characters`/`state.characterOrder` et positionne le
+  carrousel dessus (`ui.characterCarouselIndex`). Ne l'active **pas** automatiquement : il faut
+  ensuite taper "Activer ce personnage" comme pour n'importe quel autre personnage non actif.
+  Le portrait dataURL est ensuite stocké/synchronisé comme le reste du personnage : persisté dans
+  `localStorage` (`state.characters[id].portrait`) et republié tel quel (déjà compressé, pas de
+  retraitement) dans `cantrip/{charId}.portrait` par `performFbSave()`, rapatrié par
+  `performFbLoad()` (voir section Synchronisation cloud) — sans effet pratique pour Calix/Deneor,
+  dont `loadState()` resynchronise de toute façon `portrait` depuis le code à chaque chargement.
   **Supprimer un personnage** (`renderDeleteCharacterModal()`, `ui.deleteCharacterConfirm =
   { charId }`) — confirmation avant suppression définitive, protégée à deux niveaux contre
   Calix/Deneor (pas de bouton affiché, et `onAction()` ignore l'action même si déclenchée
@@ -685,8 +702,10 @@ Stockage cloud des personnages (profil + Grimoire), utilisé par les pages "Char
 première implémentation basée sur l'API Google Drive (voir Historique ci-dessous).
 
 - **Backend** : Firebase **Realtime Database**, projet `cantrip-e90fd`, région `europe-west1`. Un
-  nœud racine `cantrip` où chaque enfant `cantrip/{charId}` (`{ profile, grimoire }`) est un
-  personnage — équivalent direct de l'ancien `bdd.json` sur Drive, mais désormais lu/écrit **par
+  nœud racine `cantrip` où chaque enfant `cantrip/{charId}` (`{ profile, grimoire, savedAt,
+  portrait }` — `portrait`, ajouté août 2026, une dataURL JPEG déjà redimensionnée/compressée côté
+  client par `resizeAndCompressPortrait()`, ou `null` sans portrait, voir section Personnages) est
+  un personnage — équivalent direct de l'ancien `bdd.json` sur Drive, mais désormais lu/écrit **par
   personnage** (`cantrip/{charId}` directement, plus `cantrip` en entier) depuis que l'accès est
   restreint par personnage (voir ci-dessous) ; `cantrip/_meta` est un enfant à part, réservé aux
   métadonnées de synchro de l'outil admin (dernier chargement/sauvegarde), pas un personnage.
@@ -1031,6 +1050,11 @@ l'inverse : récupère dans les deux panneaux ce qu'un joueur a sauvegardé en j
 personnage" de l'app). Une confirmation (`confirm()` natif, cohérent avec le reste de cet outil —
 désactivation de niveau, suppression de sort, réinitialisation...) est demandée avant "Charger"
 **et** "Sauvegarder" vu le caractère destructif des deux sens.
+L'outil admin n'a aucune notion de portrait dans son UI : `fbSavePersonnage()` lit d'abord
+l'entrée Firebase existante pour en récupérer `portrait` (choisi côté app, voir section
+Personnages → "Créer un personnage") et le reporte tel quel dans le payload réécrit, plutôt que
+de l'omettre et donc l'effacer silencieusement — même logique de préservation que le grimoire dans
+`performFbSave()` (`index.html`).
 
 Ancien flux retiré (juillet 2026) : l'outil publiait auparavant directement sur GitHub (bouton
 "Publier", token GitHub PAT stocké en `localStorage`, commit direct sur `master` via l'API GitHub
@@ -1065,9 +1089,10 @@ toute nouvelle machine doit utiliser le nouveau nom ci-dessus.
 
 ## Reste à faire / pistes non traitées
 
-- Personnages créés dynamiquement : pas de renommage après création, pas d'édition de
-  sous-titre/niveau/portrait dans l'UI (contrairement à Calix/Deneor, ces champs n'ont aucun
-  formulaire dédié pour l'instant).
+- Personnages créés dynamiquement : le portrait se choisit désormais à la création (voir section
+  Personnages, `renderCreateCharacterModal()`), mais toujours pas de renommage ni d'édition de
+  portrait/sous-titre/niveau **après** création (contrairement à Calix/Deneor, ces champs n'ont
+  aucun formulaire dédié une fois le personnage créé).
 - Génération d'un `.apk` installable : voie recommandée — passer l'URL GitHub Pages dans
   PWABuilder.com pour générer un APK signé sans installer Android Studio.
 

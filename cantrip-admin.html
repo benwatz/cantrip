@@ -2244,9 +2244,17 @@ function fbLoadPersonnage() {
 function fbSavePersonnage() {
   var charId = ui.activeChar;
   if (!confirm('Sauvegarder "' + characterLabel(charId) + '" ?')) return;
-  var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) }, savedAt: Date.now() };
   showToast('Sauvegarde sur Firebase...');
-  fbSaveCharacterEntry(charId, payload).then(function () {
+  // Lecture best-effort de l'entree existante avant d'ecraser : cet outil ne gere pas les
+  // portraits (choisis depuis "Creer un personnage" dans l'app, voir CLAUDE.md), donc on
+  // preserve celui deja present sur Firebase plutot que de le faire disparaitre avec ce payload
+  // qui n'en construit pas. Meme raisonnement que la preservation du grimoire dans
+  // performFbSave() (index.html).
+  fbLoadCharacterEntry(charId).catch(function () { return null; }).then(function (existingEntry) {
+    var existingPortrait = (existingEntry && typeof existingEntry === 'object' && typeof existingEntry.portrait === 'string') ? existingEntry.portrait : null;
+    var payload = { profile: deriveFullProfile(charId), grimoire: { sections: JSON.parse(JSON.stringify(state[charId])) }, savedAt: Date.now(), portrait: existingPortrait };
+    return fbSaveCharacterEntry(charId, payload);
+  }).then(function () {
     showToast('Le personnage a été sauvegardé avec succès.', 'success');
     recordSyncEvent('lastSave', charId);
   }).catch(function (err) {
