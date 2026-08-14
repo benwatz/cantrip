@@ -791,6 +791,52 @@
     return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 
+  // Demande sa version (CACHE_NAME) au service worker qui contrôle actuellement la page, via un
+  // aller-retour postMessage (voir le listener "message" dans sw.js). Résout à null si aucun
+  // service worker ne contrôle la page (première visite, avant activation) ou si celui-ci ne
+  // répond pas sous 2s (ancien sw.js antérieur à ce système, sans listener "message" — traité
+  // comme "version inconnue" plutôt que comme "obsolète" pour ne pas afficher un faux positif au
+  // tout premier déploiement de cette fonctionnalité).
+  function getControllerSwVersion() {
+    return new Promise(function (resolve) {
+      if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) { resolve(null); return; }
+      var settled = false;
+      var timer = setTimeout(function () { if (!settled) { settled = true; navigator.serviceWorker.removeEventListener('message', onMessage); resolve(null); } }, 2000);
+      function onMessage(event) {
+        if (!event.data || event.data.type !== 'SW_VERSION') return;
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        navigator.serviceWorker.removeEventListener('message', onMessage);
+        resolve(event.data.version || null);
+      }
+      navigator.serviceWorker.addEventListener('message', onMessage);
+      navigator.serviceWorker.controller.postMessage({ type: 'GET_VERSION' });
+    });
+  }
+
+  // Compare le CACHE_NAME du sw.js réellement servi par le réseau à cet instant (donc forcément à
+  // jour, `cache: 'no-store'`) à celui du service worker qui contrôle la page — s'ils diffèrent,
+  // le service worker actif a été installé avant un déploiement plus récent (cas typique : PWA
+  // restée ouverte longtemps, ou navigateur qui tarde à revérifier sw.js) et n'a pas encore rechargé
+  // ses assets/sa logique. Affiche alors l'avertissement rouge en bas de Paramètres (voir
+  // renderSettings()).
+  function checkServiceWorkerVersion() {
+    ui.swVersionCheck.status = 'checking';
+    Promise.all([
+      fetch('sw.js?_=' + Date.now(), { cache: 'no-store' }).then(function (res) { return res.text(); }).catch(function () { return null; }),
+      getControllerSwVersion()
+    ]).then(function (results) {
+      var latestSource = results[0];
+      var controllerVersion = results[1];
+      var match = latestSource && latestSource.match(/CACHE_NAME\s*=\s*['"]([^'"]+)['"]/);
+      var latestVersion = match ? match[1] : null;
+      ui.swVersionCheck.status = 'checked';
+      ui.swVersionCheck.outdated = !!(latestVersion && controllerVersion && latestVersion !== controllerVersion);
+      render();
+    });
+  }
+
   // Lecture/écriture ciblées sur cantrip/{charId} (pas le nœud "cantrip" entier) : chaque
   // personnage a ses propres règles de sécurité RTDB ($charId, voir Firebase Console — accès
   // restreint par characterAccess/{charId}/{uid}, suppression restreinte au créateur via
@@ -900,6 +946,7 @@
     spellDetail: null, // null | { spell, levelTag, leaving: bool } — popup d'infos complètes au tap sur un sort du Grimoire
     spellDetailEnterPending: false, // true juste après déclenchement ; consommé une fois par render()
     githubDeployInfo: { status: 'idle', date: null }, // 'idle'|'loading'|'loaded'|'error' — date du dernier commit sur master (proxy du dernier déploiement GitHub Pages), affichée en bas de Paramètres
+    swVersionCheck: { status: 'idle', outdated: false }, // 'idle'|'checking'|'checked' — compare CACHE_NAME du sw.js le plus récent (fetch réseau) à celui du service worker actuellement actif (postMessage) ; affiche un avertissement rouge en bas de Paramètres si différents, voir checkServiceWorkerVersion()
     codexAccess: null, // null (pas encore vérifié) | true | false — accès au Codex, géré par l'admin (nœud Firebase "codex"/"codexAccess") ; tant que null ou false, l'entrée "Codex" du menu Paramètres reste masquée
     codexEntries: null // null (pas encore chargé) | tableau [{ id, prenom, nom, occupation, faction, lieu, portrait }] une fois codexAccess === true
   };
@@ -1889,11 +1936,19 @@
         ? 'Dernière mise à jour : indisponible'
         : 'Dernière mise à jour : …';
 
+    var swWarningHtml = ui.swVersionCheck.outdated
+      ? '<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);border-radius:10px">' +
+          '<div style="font-size:12px;color:#ef4444;font-weight:600;text-align:center;line-height:1.4">Version obsolète du service worker : l\'app n\'a pas encore chargé la dernière mise à jour.</div>' +
+          '<div data-action="reload-app" style="width:100%;height:38px;border-radius:8px;background:#ef4444;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer" class="font-cinzel">Relancer l\'app</div>' +
+        '</div>'
+      : '';
+
     return (
       '<div style="display:flex;flex-direction:column;height:100%;gap:14px">' +
         '<div style="font-size:21px;font-weight:700;letter-spacing:0.3px;flex:none" class="font-cinzel">Paramètres</div>' +
         '<div style="display:flex;flex-direction:column;gap:10px">' + itemsHtml + '</div>' +
         '<div style="flex:1"></div>' +
+        swWarningHtml +
         '<div data-action="open-admin" style="flex:none;text-align:center;font-size:11px;color:var(--text-dim);text-decoration:underline;cursor:pointer;padding-bottom:4px">Outil admin</div>' +
         '<div style="flex:none;text-align:center;font-size:11px;color:var(--text-muted);padding-bottom:2px">' + deployText + '</div>' +
       '</div>'
@@ -3070,11 +3125,31 @@
         if (ui.view === 'settings' && ui.githubDeployInfo.status === 'idle') {
           fetchGithubDeployInfo();
         }
+        if (ui.view === 'settings' && ui.swVersionCheck.status === 'idle') {
+          checkServiceWorkerVersion();
+        }
         render();
         break;
       }
 
       case 'open-admin': window.open('cantrip-admin.html', '_blank'); break;
+
+      case 'reload-app': {
+        // Force une revérification immédiate de sw.js (bypass la logique d'update périodique du
+        // navigateur) avant de recharger — sw.js appelle déjà self.skipWaiting()/clients.claim()
+        // sans condition, donc un service worker plus récent détecté ici s'active et prend le
+        // contrôle sans attendre la fermeture de cet onglet.
+        if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistration) {
+          navigator.serviceWorker.getRegistration().then(function (reg) {
+            return reg ? reg.update() : null;
+          }).catch(function () { /* hors ligne ou échec : on recharge quand même */ }).then(function () {
+            window.location.reload();
+          });
+        } else {
+          window.location.reload();
+        }
+        break;
+      }
 
       case 'damage': applyDamage(); break;
       case 'heal': applyHeal(); break;

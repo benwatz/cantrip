@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cantrip-v121';
+const CACHE_NAME = 'cantrip-v122';
 const CORE_ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './characters/calix.jpg', './characters/deneor.png'];
 
 self.addEventListener('install', (event) => {
@@ -15,6 +15,15 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+// Répond à index.html quand il demande la version du service worker actif (voir
+// getControllerSwVersion() / checkServiceWorkerVersion() dans index.html) — sert à détecter un
+// service worker resté sur une version plus ancienne que celle réellement déployée.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'GET_VERSION' && event.source) {
+    event.source.postMessage({ type: 'SW_VERSION', version: CACHE_NAME });
+  }
 });
 
 self.addEventListener('fetch', (event) => {

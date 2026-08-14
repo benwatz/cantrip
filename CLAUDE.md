@@ -424,6 +424,28 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    et lui-même protégé par son propre écran de connexion Google, donc ce lien reste sans risque à
    afficher à n'importe quel joueur ayant l'app ouverte.
 
+   **Avertissement "Version obsolète du service worker"** (août 2026, `ui.swVersionCheck = {
+   status: 'idle'|'checking'|'checked', outdated: bool }`) — encadré rouge affiché juste au-dessus
+   du lien "Outil admin" quand le service worker qui contrôle réellement la page (voir section
+   Service Worker plus bas) n'est pas celui du dernier déploiement, avec un bouton "Relancer l'app"
+   (`data-action="reload-app"`). Déclenché par `checkServiceWorkerVersion()`, appelée au même
+   moment que `fetchGithubDeployInfo()` (navigation vers `settings`, une seule fois par session tant
+   que `ui.swVersionCheck.status === 'idle'`) : elle compare le `CACHE_NAME` extrait par regex d'un
+   `fetch('sw.js?_=' + Date.now(), { cache: 'no-store' })` (donc forcément le fichier réellement
+   servi à cet instant, jamais une copie mise en cache) à celui renvoyé par le service worker
+   *actif* via un aller-retour `postMessage` (`getControllerSwVersion()` poste `{ type:
+   'GET_VERSION' }` à `navigator.serviceWorker.controller`, `sw.js` répond `{ type: 'SW_VERSION',
+   version: CACHE_NAME }` — voir le listener `message` de `sw.js`). Pas de réponse sous 2s (aucun
+   service worker ne contrôle encore la page, ou un `sw.js` antérieur à ce système sans listener
+   `message`) → traité comme "version inconnue", jamais comme "obsolète" (pas de faux positif au
+   premier déploiement de cette fonctionnalité elle-même). "Relancer l'app"
+   (`case 'reload-app'` dans `onAction()`) appelle `registration.update()` — qui force une
+   revérification immédiate de `sw.js` au lieu d'attendre le prochain cycle périodique du
+   navigateur — puis `window.location.reload()` inconditionnellement (même si `update()` échoue,
+   ex. hors ligne) ; `sw.js` appelle déjà `self.skipWaiting()`/`self.clients.claim()` sans condition
+   dans `install`/`activate` (voir section Service Worker), donc un service worker plus récent
+   détecté par cet `update()` prend le contrôle sans attendre la fermeture de l'onglet.
+
 ## Personnages (Calix / Deneor + personnages créés dynamiquement)
 
 `state.characters` est un objet `{ [id]: {...} }`, chaque entrée `{ id, name, subtitle, level,
@@ -681,6 +703,14 @@ Stratégie réseau d'abord avec fallback cache (pas de stale-while-revalidate). 
 versionné (`cantrip-vNN`, voir `sw.js` pour la valeur actuelle) — **incrémenter cette constante
 à chaque changement significatif des assets statiques** (`index.html`, `manifest.json`,
 `icon.svg`, `characters/*.jpg|png`) pour forcer l'invalidation du cache côté client.
+`install`/`activate` appellent déjà `self.skipWaiting()`/`self.clients.claim()` sans condition
+(pas d'état "waiting" : un nouveau `sw.js` détecté par le navigateur s'active et prend le contrôle
+immédiatement, sans attendre la fermeture des onglets ouverts).
+Un listener `message` (août 2026) répond à une requête `{ type: 'GET_VERSION' }` par `{ type:
+'SW_VERSION', version: CACHE_NAME }` — sert uniquement à `checkServiceWorkerVersion()`/
+`getControllerSwVersion()` (`index.html`) pour détecter et signaler dans Paramètres un service
+worker actif resté sur une version antérieure au dernier déploiement, voir section Personnage →
+Paramètres → "Avertissement 'Version obsolète du service worker'" plus haut.
 
 ## Déploiement
 
