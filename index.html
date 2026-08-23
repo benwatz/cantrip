@@ -939,6 +939,7 @@
     fbConfirm: null, // { action: 'load'|'save', charId? } quand la confirmation Charger/Sauvegarder Firebase est ouverte
     createCharacterModal: null, // { name: string, portrait: string|null, portraitBusy: bool, portraitError: string|null } quand la modale "Créer un personnage" est ouverte — portrait est déjà la dataURL redimensionnée/compressée (voir resizeAndCompressPortrait), prête à être stockée telle quelle sur Firebase
     deleteCharacterConfirm: null, // { charId } quand la confirmation de suppression est ouverte (jamais pour calix/deneor)
+    deleteGrimoireSpellConfirm: null, // { sectionIndex, spellIndex } quand la confirmation de suppression d'un sort du Grimoire est ouverte
     themeMenuOpen: false, // true quand la modale de choix du thème (Clair/Sombre) est ouverte
     trackerCollapsed: { attacks: false, resources: false, spellSlots: false }, // replie chaque bloc du Tracker indépendamment
     codexPreview: null, // null | { name: string, portrait: string, leaving: bool } — portrait agrandi au tap sur une ligne du Codex
@@ -1322,6 +1323,9 @@
     }
     if (ui.deleteCharacterConfirm) {
       app.insertAdjacentHTML('beforeend', renderDeleteCharacterModal());
+    }
+    if (ui.deleteGrimoireSpellConfirm) {
+      app.insertAdjacentHTML('beforeend', renderDeleteGrimoireSpellModal());
     }
     if (ui.themeMenuOpen) {
       app.insertAdjacentHTML('beforeend', renderThemeMenuModal());
@@ -2221,7 +2225,7 @@
             (summary ? '<div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(summary) + '</div>' : '') +
           '</div>' +
           '<div style="flex:none;color:var(--text-dim);display:flex">' + iconChevronRight(14) + '</div>' +
-          '<div data-action="remove-grimoire-spell" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
+          '<div data-action="open-delete-grimoire-spell" data-section-index="' + sIdx + '" data-spell-index="' + spIdx + '" style="flex:none;width:32px;height:32px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;' + lockedRowStyle + '">&times;</div>' +
         '</div>';
       }).join('');
 
@@ -2596,6 +2600,23 @@
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<div data-action="cancel-delete-character" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
           '<div data-action="confirm-delete-character" style="flex:1;height:44px;border-radius:6px;background:rgba(239,68,68,0.85);border:1px solid rgba(239,68,68,0.4);color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Supprimer</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderDeleteGrimoireSpellModal() {
+    var sectionIndex = ui.deleteGrimoireSpellConfirm.sectionIndex;
+    var spellIndex = ui.deleteGrimoireSpellConfirm.spellIndex;
+    var spell = settingsGrimoireData().sections[sectionIndex].spells[spellIndex];
+    var spellName = spell.name ? escapeHtml(spell.name) : 'ce sort sans nom';
+    return '<div id="deleteGrimoireSpellOverlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;box-sizing:border-box">' +
+      '<div style="width:100%;max-width:300px;background:var(--bg-card);border:1px solid rgba(var(--border-tint),0.3);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="font-size:17px;font-weight:700;color:#ef4444" class="font-cinzel">Supprimer ce sort</div>' +
+        '<div style="font-size:13px;color:var(--text-desc);line-height:1.4">Supprimer ' + spellName + ' du Grimoire ? Cette suppression ne sera définitive qu\'en validant vos modifications.</div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<div data-action="cancel-delete-grimoire-spell" style="flex:1;height:44px;border-radius:6px;background:transparent;border:1px solid rgba(var(--border-tint),0.34);color:var(--text-label);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">Annuler</div>' +
+          '<div data-action="confirm-delete-grimoire-spell" style="flex:1;height:44px;border-radius:6px;background:rgba(239,68,68,0.85);border:1px solid rgba(239,68,68,0.4);color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center" class="font-cinzel">Supprimer</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -3300,10 +3321,23 @@
         render();
         break;
       }
-      case 'remove-grimoire-spell': {
-        var rmSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
-        var rmSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
-        settingsGrimoireData().sections[rmSpellSectionIdx].spells.splice(rmSpellIdx, 1);
+      case 'open-delete-grimoire-spell': {
+        var openDelSpellSectionIdx = parseInt(e.currentTarget.getAttribute('data-section-index'), 10);
+        var openDelSpellIdx = parseInt(e.currentTarget.getAttribute('data-spell-index'), 10);
+        ui.deleteGrimoireSpellConfirm = { sectionIndex: openDelSpellSectionIdx, spellIndex: openDelSpellIdx };
+        render();
+        break;
+      }
+      case 'cancel-delete-grimoire-spell': {
+        ui.deleteGrimoireSpellConfirm = null;
+        render();
+        break;
+      }
+      case 'confirm-delete-grimoire-spell': {
+        var confirmDelSpellSectionIdx = ui.deleteGrimoireSpellConfirm.sectionIndex;
+        var confirmDelSpellIdx = ui.deleteGrimoireSpellConfirm.spellIndex;
+        settingsGrimoireData().sections[confirmDelSpellSectionIdx].spells.splice(confirmDelSpellIdx, 1);
+        ui.deleteGrimoireSpellConfirm = null;
         render();
         break;
       }
