@@ -217,6 +217,19 @@ réécriture complète de `innerHTML` à chaque changement (pas de diffing, pas 
    central en `flex:1` pour occuper tout l'espace restant entre les deux flèches. Les flèches
    réutilisent `iconArrowLeft()` — la droite via `transform:scaleX(-1)` sur son conteneur, même
    technique que les flèches du carrousel "Charger un personnage".
+   **Rappel de concentration** (août 2026) : le Grimoire est la seule page hors Tracker où l'état
+   `profile().concentration` reste visible. Quand il est vrai, la rangée à 5 zones est emballée dans
+   une carte (`background:var(--bg-card)`, bordure, `border-radius:16px`, `padding:8px`) cerclée du
+   liseret violet rotatif `hp-concentration-ring` — la **même classe que le bloc PV**, réutilisable
+   telle quelle car son `::before` (`inset:-3px`, `border-radius:19px`) est déjà calibré pour une
+   carte en `border-radius:16px`. Carte + liseret n'apparaissent **que** si la concentration est
+   active (pas de restylage permanent du chrome ; pas de reflow en usage puisqu'on ne peut pas
+   basculer la concentration depuis cette page). `updateGrimoireFocusUI` masquant tout
+   `#grimoireChromeBlock` au focus de la recherche, le champ `#grimoireSearchInput` prend le relais
+   pendant ce temps via la classe `concentration-active` (pulse `box-shadow` violet, ajoutée au
+   rendu quand `concentrating`) ; le liseret revient sur la carte au blur. Aucun CSS ni modif de
+   `updateGrimoireFocusUI` nécessaires — tout est dans le markup de `renderGrimoire()` (variable
+   locale `concentrating`).
    **Tous et Favoris bornent la chaîne de navigation** des flèches -/+ (août 2026) : la séquence
    complète est `['tous'].concat(grimoireTabs()).concat(['favoris'])` (`grimoireTabs()` renvoie
    les niveaux réels ascendants + `'classe'`). Depuis "Tous", la flèche droite mène au premier
