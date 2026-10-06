@@ -735,9 +735,8 @@ Paramètres → "Avertissement 'Version obsolète du service worker'" plus haut.
   déploiement automatique à chaque push sur `master`, qui sert directement `index.html` à la
   racine (pas de pipeline CI, pas de dossier `dist`). `.nojekyll` présent pour désactiver le
   traitement Jekyll.
-- **Preprod** (Netlify) : https://ben-cantrip.netlify.app/ — déploiement automatique à chaque
-  push sur `preprod`, configuré depuis le dashboard Netlify (pas de `netlify.toml` dans le
-  dépôt).
+- **Pas de preprod** : on travaille directement sur `master` (la branche et l'environnement
+  Netlify `preprod` ont été supprimés en octobre 2026).
 
 ## Synchronisation cloud (Firebase)
 
