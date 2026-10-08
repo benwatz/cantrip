@@ -732,10 +732,14 @@ Paramètres → "Avertissement 'Version obsolète du service worker'" plus haut.
 - Dépôt : https://github.com/benwatz/cantrip (public, compte GitHub "benwatz" — renommé depuis
   "Nerdash" en juillet 2026, même compte/ID sous-jacent)
 - **Prod** (GitHub Pages, HTTPS, installable en PWA) : https://benwatz.github.io/cantrip/ —
-  déploiement automatique à chaque push sur `master`, qui sert directement `index.html` à la
-  racine (pas de pipeline CI, pas de dossier `dist`). `.nojekyll` présent pour désactiver le
-  traitement Jekyll.
-- **Pas de preprod** : on travaille directement sur `master` (la branche et l'environnement
+  déploiement automatique à chaque push sur `main` (branche par défaut, anciennement `master`,
+  renommée en octobre 2026), qui sert directement `index.html` à la racine (pas de pipeline CI,
+  pas de dossier `dist`). `.nojekyll` présent pour désactiver le traitement Jekyll. Réglage à
+  conserver dans GitHub → Settings → Pages : Source "Deploy from a branch", branche `main`,
+  dossier `/ (root)` — un 404 sur l'URL de prod signale que Pages n'est plus activé ou ne pointe
+  plus sur la bonne branche (constaté en octobre 2026 : `has_pages` à `false` après le
+  renommage `master` → `main`).
+- **Pas de preprod** : on travaille directement sur `main` (la branche et l'environnement
   Netlify `preprod` ont été supprimés en octobre 2026).
 
 ## Synchronisation cloud (Firebase)
