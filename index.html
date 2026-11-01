@@ -754,29 +754,12 @@
   // Ouvre le popup de connexion Google si besoin ; ne redemande rien si déjà connecté (Firebase
   // Auth persiste la session dans IndexedDB entre les rechargements, contrairement au jeton OAuth
   // de l'ancienne synchro Drive, qui expirait au bout d'une heure).
-  function isStandaloneApp() {
-    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-      window.navigator.standalone === true;
-  }
-
   function fbEnsureAuth() {
     if (fbAuth.currentUser) {
       fbRequestAccess(fbAuth.currentUser);
       return Promise.resolve(fbAuth.currentUser);
     }
     var provider = new firebase.auth.GoogleAuthProvider();
-    // PWA installée (WebAPK Android) : signInWithPopup ouvre un onglet intégré sans window.opener,
-    // la page /__/auth/handler de firebaseapp.com affiche alors "The requested action is invalid."
-    // On passe donc par une redirection plein écran ; la session est retrouvée au retour via
-    // getRedirectResult()/onAuthStateChanged (voir fbHandleRedirectResult), l'utilisateur relance
-    // ensuite lui-même son action Charger/Sauvegarder.
-    if (isStandaloneApp()) {
-      return fbAuth.signInWithRedirect(provider).then(function () {
-        return new Promise(function () { /* la page va être déchargée par la redirection */ });
-      }).catch(function (err) {
-        throw new Error('Connexion Google refusée (' + (err.code || err.message) + ')');
-      });
-    }
     return fbAuth.signInWithPopup(provider).then(function (result) {
       fbRequestAccess(result.user);
       return result.user;
@@ -4148,20 +4131,6 @@
   }
 
   fbAuth.onAuthStateChanged(function (user) { checkCodexAccess(user); resolveDefaultTheme(user); });
-
-  // Retour d'une connexion par redirection (PWA installée, voir fbEnsureAuth) : enregistre la
-  // demande d'accès, confirme à l'utilisateur ou affiche l'erreur. Sans effet (résultat vide) si
-  // la page n'a pas été ouverte suite à une redirection.
-  fbAuth.getRedirectResult().then(function (result) {
-    if (result && result.user) {
-      fbRequestAccess(result.user);
-      showFbToast('Connecté. Relance Charger ou Sauvegarder.');
-      render();
-    }
-  }).catch(function (err) {
-    ui.fbError = 'Connexion Google refusée (' + ((err && (err.code || err.message)) || 'erreur inconnue') + ')';
-    render();
-  });
 
   render();
 

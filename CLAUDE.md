@@ -923,14 +923,16 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   la propriété d'un nouveau personnage, jamais gérer les accès d'autrui). Le panneau latéral
   "Comment ça marche" (`#sidePanel`, commun aux modes Personnage/Grimoire) est masqué en mode Accès
   (`renderSidePanel()` retourne tôt avec `display:none` si `ui.mode === 'acces'`).
-- **Connexion en PWA installée (2026-11-01)** : `fbEnsureAuth()` utilise `signInWithRedirect`
-  (au lieu de `signInWithPopup`) quand `isStandaloneApp()` est vrai (`display-mode: standalone`).
-  Dans une WebAPK Android, la popup s'ouvre dans un onglet intégré sans `window.opener` et la
-  page `cantrip-e90fd.firebaseapp.com/__/auth/handler` affiche "The requested action is invalid."
-  Au retour de redirection, `fbAuth.getRedirectResult()` (fin de script) enregistre la demande
-  d'accès et affiche un toast ; l'utilisateur relance lui-même Charger/Sauvegarder (la page a été
-  rechargée, l'action d'origine est perdue). Hors mode installé, la popup reste utilisée.
-  `cantrip-admin.html` n'est pas concerné (jamais utilisé en PWA installée).
+- **Connexion Google (popup, y compris en PWA installée)** : `fbEnsureAuth()` utilise toujours
+  `signInWithPopup`. Le correctif `signInWithRedirect` pour la PWA installée (2026-11-01) a été
+  retiré : la page `cantrip-e90fd.firebaseapp.com/__/auth/handler` affichait "The requested action
+  is invalid." parce que le site Firebase Hosting par défaut du projet n'avait aucune version
+  déployée (`/__/firebase/init.json` en 404) et que la clé API (restreinte par référents HTTP)
+  n'autorisait pas `cantrip-e90fd.firebaseapp.com/*` ni `cantrip-e90fd.web.app/*`. **À garder en
+  place** : une version Hosting déployée (une page minimale suffit, `firebase deploy --only
+  hosting --project cantrip-e90fd` ; Hosting ne sert rien d'autre que `/__/auth/*` et
+  `/__/firebase/init.json` pour l'app) et, parmi les référents HTTP de la clé, `benwatz.github.io/*`,
+  `cantrip-e90fd.firebaseapp.com/*` et `cantrip-e90fd.web.app/*`.
 - **Config client** (`FIREBASE_CONFIG`, dupliquée dans `index.html` et `cantrip-admin.html`,
   même convention que le reste des constantes de sync) : n'est pas un secret, comme l'ancien
   Client ID OAuth Drive — les règles RTDB ci-dessus sont la vraie barrière d'accès, pas la config.
