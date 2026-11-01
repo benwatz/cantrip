@@ -790,7 +790,7 @@
   // la date du dernier déploiement.
   function fetchGithubDeployInfo() {
     ui.githubDeployInfo.status = 'loading';
-    fetch('https://api.github.com/repos/benwatz/cantrip/commits/master')
+    fetch('https://api.github.com/repos/benwatz/cantrip/commits/main')
       .then(function (res) { if (!res.ok) throw new Error('http ' + res.status); return res.json(); })
       .then(function (data) {
         ui.githubDeployInfo.status = 'loaded';

@@ -732,10 +732,11 @@ Paramètres → "Avertissement 'Version obsolète du service worker'" plus haut.
 - Dépôt : https://github.com/benwatz/cantrip (public, compte GitHub "benwatz" — renommé depuis
   "Nerdash" en juillet 2026, même compte/ID sous-jacent)
 - **Prod** (GitHub Pages, HTTPS, installable en PWA) : https://benwatz.github.io/cantrip/ —
-  déploiement automatique à chaque push sur `master`, qui sert directement `index.html` à la
+  déploiement automatique à chaque push sur `main` (branche par défaut du dépôt ; il n'existe
+  pas de branche `master`, ne jamais en créer), qui sert directement `index.html` à la
   racine (pas de pipeline CI, pas de dossier `dist`). `.nojekyll` présent pour désactiver le
   traitement Jekyll.
-- **Pas de preprod** : on travaille directement sur `master` (la branche et l'environnement
+- **Pas de preprod** : on travaille directement sur `main` (la branche et l'environnement
   Netlify `preprod` ont été supprimés en octobre 2026).
 
 ## Synchronisation cloud (Firebase)
