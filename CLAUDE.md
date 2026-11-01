@@ -922,6 +922,14 @@ première implémentation basée sur l'API Google Drive (voir Historique ci-dess
   la propriété d'un nouveau personnage, jamais gérer les accès d'autrui). Le panneau latéral
   "Comment ça marche" (`#sidePanel`, commun aux modes Personnage/Grimoire) est masqué en mode Accès
   (`renderSidePanel()` retourne tôt avec `display:none` si `ui.mode === 'acces'`).
+- **Connexion en PWA installée (2026-11-01)** : `fbEnsureAuth()` utilise `signInWithRedirect`
+  (au lieu de `signInWithPopup`) quand `isStandaloneApp()` est vrai (`display-mode: standalone`).
+  Dans une WebAPK Android, la popup s'ouvre dans un onglet intégré sans `window.opener` et la
+  page `cantrip-e90fd.firebaseapp.com/__/auth/handler` affiche "The requested action is invalid."
+  Au retour de redirection, `fbAuth.getRedirectResult()` (fin de script) enregistre la demande
+  d'accès et affiche un toast ; l'utilisateur relance lui-même Charger/Sauvegarder (la page a été
+  rechargée, l'action d'origine est perdue). Hors mode installé, la popup reste utilisée.
+  `cantrip-admin.html` n'est pas concerné (jamais utilisé en PWA installée).
 - **Config client** (`FIREBASE_CONFIG`, dupliquée dans `index.html` et `cantrip-admin.html`,
   même convention que le reste des constantes de sync) : n'est pas un secret, comme l'ancien
   Client ID OAuth Drive — les règles RTDB ci-dessus sont la vraie barrière d'accès, pas la config.
